@@ -1,0 +1,5432 @@
+diff -crB linux-4.2/arch/x86/ia32/sys_ia32.c linux-4.2-sbox/arch/x86/ia32/sys_ia32.c
+*** linux-4.2/arch/x86/ia32/sys_ia32.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/arch/x86/ia32/sys_ia32.c	Wed Feb 10 16:46:00 2016
+***************
+*** 95,106 ****
+  	return 0;
+  }
+  
+  asmlinkage long sys32_stat64(const char __user *filename,
+  			     struct stat64 __user *statbuf)
+  {
+  	struct kstat stat;
+! 	int ret = vfs_stat(filename, &stat);
+  
+  	if (!ret)
+  		ret = cp_stat64(statbuf, &stat);
+  	return ret;
+--- 95,120 ----
+  	return 0;
+  }
+  
++ int cher_patch_is_secure_path(const char *);
++ 
+  asmlinkage long sys32_stat64(const char __user *filename,
+  			     struct stat64 __user *statbuf)
+  {
+  	struct kstat stat;
+! 	int ret = 0;
+! 
+!         if (SBOX_IS_RESTRICTED()) {
+!                 struct filename *tmp = getname(filename);
+!                 if (IS_ERR(tmp)) return -EINVAL;
+!                 if (cher_patch_is_secure_path(tmp->name) < 0) {
+!                         putname(tmp);
+!                         return -EPERM;
+!                 }
+!                 if (!strncmp(tmp->name, "/SANDBOX/", 9)) filename += 9;
+!                 putname(tmp);
+!         }
+  
++         ret = vfs_stat(filename, &stat);
+  	if (!ret)
+  		ret = cp_stat64(statbuf, &stat);
+  	return ret;
+***************
+*** 110,116 ****
+  			      struct stat64 __user *statbuf)
+  {
+  	struct kstat stat;
+! 	int ret = vfs_lstat(filename, &stat);
+  	if (!ret)
+  		ret = cp_stat64(statbuf, &stat);
+  	return ret;
+--- 124,143 ----
+  			      struct stat64 __user *statbuf)
+  {
+  	struct kstat stat;
+! 	int ret = 0;
+! 
+!         if (SBOX_IS_RESTRICTED()) {
+!                 struct filename *tmp = getname(filename);
+!                 if (IS_ERR(tmp)) return -EINVAL;
+!                 if (cher_patch_is_secure_path(tmp->name) < 0) {
+!                         putname(tmp);
+!                         return -EPERM;
+!                 }
+!                 if (!strncmp(tmp->name, "/SANDBOX/", 9)) filename += 9;
+!                 putname(tmp);
+!         }
+! 
+! 	ret = vfs_lstat(filename, &stat);
+  	if (!ret)
+  		ret = cp_stat64(statbuf, &stat);
+  	return ret;
+***************
+*** 131,136 ****
+--- 158,167 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	error = vfs_fstatat(dfd, filename, &stat, flag);
+  	if (error)
+  		return error;
+diff -crB linux-4.2/arch/x86/kernel/ioport.c linux-4.2-sbox/arch/x86/kernel/ioport.c
+*** linux-4.2/arch/x86/kernel/ioport.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/arch/x86/kernel/ioport.c	Wed Feb 10 16:46:00 2016
+***************
+*** 26,31 ****
+--- 26,36 ----
+  	struct tss_struct *tss;
+  	unsigned int i, max_long, bytes, bytes_updated;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 //SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if ((from + num <= from) || (from + num > IO_BITMAP_BITS))
+  		return -EINVAL;
+  	if (turn_on && !capable(CAP_SYS_RAWIO))
+***************
+*** 99,104 ****
+--- 104,114 ----
+  	unsigned int old = (regs->flags >> 12) & 3;
+  	struct thread_struct *t = &current->thread;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 //SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (level > 3)
+  		return -EINVAL;
+  	/* Trying to gain more privileges? */
+diff -crB linux-4.2/arch/x86/kernel/ldt.c linux-4.2-sbox/arch/x86/kernel/ldt.c
+*** linux-4.2/arch/x86/kernel/ldt.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/arch/x86/kernel/ldt.c	Wed Feb 10 16:46:00 2016
+***************
+*** 276,281 ****
+--- 276,286 ----
+  {
+  	int ret = -ENOSYS;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	switch (func) {
+  	case 0:
+  		ret = read_ldt(ptr, bytecount);
+diff -crB linux-4.2/arch/x86/kernel/vm86_32.c linux-4.2-sbox/arch/x86/kernel/vm86_32.c
+*** linux-4.2/arch/x86/kernel/vm86_32.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/arch/x86/kernel/vm86_32.c	Wed Feb 10 16:46:00 2016
+***************
+*** 212,217 ****
+--- 212,222 ----
+  	struct task_struct *tsk = current;
+  	int tmp;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (tsk->thread.saved_sp0)
+  		return -EPERM;
+  	tmp = copy_vm86_regs_from_user(&info.regs, &v86->regs,
+***************
+*** 238,243 ****
+--- 243,253 ----
+  	int tmp;
+  	struct vm86plus_struct __user *v86;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	tsk = current;
+  	switch (cmd) {
+  	case VM86_REQUEST_IRQ:
+diff -crB linux-4.2/fs/aio.c linux-4.2-sbox/fs/aio.c
+*** linux-4.2/fs/aio.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/aio.c	Wed Feb 10 16:46:00 2016
+***************
+*** 1310,1315 ****
+--- 1310,1318 ----
+  	unsigned long ctx;
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	ret = get_user(ctx, ctxp);
+  	if (unlikely(ret))
+  		goto out;
+***************
+*** 1342,1350 ****
+   */
+  SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
+  {
+! 	struct kioctx *ioctx = lookup_ioctx(ctx);
+  	if (likely(NULL != ioctx)) {
+  		struct ctx_rq_wait wait;
+  		int ret;
+  
+  		init_completion(&wait.comp);
+--- 1345,1360 ----
+   */
+  SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
+  {
+! 	struct kioctx *ioctx = NULL;
+! 
+!         if (SBOX_IS_RESTRICTED()) {
+!                 return -EPERM;
+!         }
+! 
+! 	ioctx = lookup_ioctx(ctx);
+  	if (likely(NULL != ioctx)) {
+  		struct ctx_rq_wait wait;
++ 
+  		int ret;
+  
+  		init_completion(&wait.comp);
+***************
+*** 1628,1633 ****
+--- 1638,1646 ----
+  SYSCALL_DEFINE3(io_submit, aio_context_t, ctx_id, long, nr,
+  		struct iocb __user * __user *, iocbpp)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_io_submit(ctx_id, nr, iocbpp, 0);
+  }
+  
+***************
+*** 1670,1675 ****
+--- 1683,1691 ----
+  	u32 key;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	ret = get_user(key, &iocb->aio_key);
+  	if (unlikely(ret))
+  		return -EFAULT;
+***************
+*** 1720,1728 ****
+  		struct io_event __user *, events,
+  		struct timespec __user *, timeout)
+  {
+! 	struct kioctx *ioctx = lookup_ioctx(ctx_id);
+  	long ret = -EINVAL;
+  
+  	if (likely(ioctx)) {
+  		if (likely(min_nr <= nr && min_nr >= 0))
+  			ret = read_events(ioctx, min_nr, nr, events, timeout);
+--- 1736,1748 ----
+  		struct io_event __user *, events,
+  		struct timespec __user *, timeout)
+  {
+! 	struct kioctx *ioctx;
+  	long ret = -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
++         ioctx = lookup_ioctx(ctx_id);
+  	if (likely(ioctx)) {
+  		if (likely(min_nr <= nr && min_nr >= 0))
+  			ret = read_events(ioctx, min_nr, nr, events, timeout);
+diff -crB linux-4.2/fs/buffer.c linux-4.2-sbox/fs/buffer.c
+*** linux-4.2/fs/buffer.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/buffer.c	Wed Feb 10 16:46:00 2016
+***************
+*** 3294,3299 ****
+--- 3294,3302 ----
+  {
+  	static int msg_count;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (!capable(CAP_SYS_ADMIN))
+  		return -EPERM;
+  
+diff -crB linux-4.2/fs/compat.c linux-4.2-sbox/fs/compat.c
+*** linux-4.2/fs/compat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/compat.c	Wed Feb 10 16:46:00 2016
+***************
+*** 77,82 ****
+--- 77,87 ----
+  {
+  	struct timespec tv[2];
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (t) {
+  		if (get_user(tv[0].tv_sec, &t->actime) ||
+  		    get_user(tv[1].tv_sec, &t->modtime))
+***************
+*** 91,96 ****
+--- 96,106 ----
+  {
+  	struct timespec tv[2];
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if  (t) {
+  		if (compat_get_timespec(&tv[0], &t[0]) ||
+  		    compat_get_timespec(&tv[1], &t[1]))
+***************
+*** 106,111 ****
+--- 116,126 ----
+  {
+  	struct timespec tv[2];
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (t) {
+  		if (get_user(tv[0].tv_sec, &t[0].tv_sec) ||
+  		    get_user(tv[0].tv_nsec, &t[0].tv_usec) ||
+***************
+*** 159,170 ****
+--- 174,198 ----
+  	return copy_to_user(ubuf, &tmp, sizeof(tmp)) ? -EFAULT : 0;
+  }
+  
++ int cher_patch_is_secure_path(const char*);
++ 
+  COMPAT_SYSCALL_DEFINE2(newstat, const char __user *, filename,
+  		       struct compat_stat __user *, statbuf)
+  {
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 struct filename *tmp = getname(filename);
++                 if (IS_ERR(tmp)) return -EINVAL;
++                 if (cher_patch_is_secure_path(tmp->name) < 0) {
++                         putname(tmp);
++                         return -EPERM;
++                 }
++                 if (!strncmp(tmp->name, "/SANDBOX/", 9)) filename += 9;
++                 putname(tmp);
++         }
++ 
+  	error = vfs_stat(filename, &stat);
+  	if (error)
+  		return error;
+***************
+*** 177,182 ****
+--- 205,221 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 struct filename *tmp = getname(filename);
++                 if (IS_ERR(tmp)) return -EINVAL;
++                 if (cher_patch_is_secure_path(tmp->name) < 0) {
++                         putname(tmp);
++                         return -EPERM;
++                 }
++                 if (!strncmp(tmp->name, "/SANDBOX/", 9)) filename += 9;
++                 putname(tmp);
++         }
++ 
+  	error = vfs_lstat(filename, &stat);
+  	if (error)
+  		return error;
+***************
+*** 191,196 ****
+--- 230,238 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	error = vfs_fstatat(dfd, filename, &stat, flag);
+  	if (error)
+  		return error;
+***************
+*** 250,256 ****
+  COMPAT_SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct compat_statfs __user *, buf)
+  {
+  	struct kstatfs tmp;
+! 	int error = user_statfs(pathname, &tmp);
+  	if (!error)
+  		error = put_compat_statfs(buf, &tmp);
+  	return error;
+--- 292,303 ----
+  COMPAT_SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct compat_statfs __user *, buf)
+  {
+  	struct kstatfs tmp;
+! 	int error;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+!         error = user_statfs(pathname, &tmp);
+  	if (!error)
+  		error = put_compat_statfs(buf, &tmp);
+  	return error;
+***************
+*** 259,265 ****
+  COMPAT_SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct compat_statfs __user *, buf)
+  {
+  	struct kstatfs tmp;
+! 	int error = fd_statfs(fd, &tmp);
+  	if (!error)
+  		error = put_compat_statfs(buf, &tmp);
+  	return error;
+--- 306,317 ----
+  COMPAT_SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct compat_statfs __user *, buf)
+  {
+  	struct kstatfs tmp;
+! 	int error;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+!         error = fd_statfs(fd, &tmp);
+  	if (!error)
+  		error = put_compat_statfs(buf, &tmp);
+  	return error;
+***************
+*** 303,308 ****
+--- 355,363 ----
+  	struct kstatfs tmp;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (sz != sizeof(*buf))
+  		return -EINVAL;
+  
+***************
+*** 317,322 ****
+--- 372,380 ----
+  	struct kstatfs tmp;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (sz != sizeof(*buf))
+  		return -EINVAL;
+  
+***************
+*** 335,341 ****
+  {
+  	struct compat_ustat tmp;
+  	struct kstatfs sbuf;
+! 	int err = vfs_ustat(new_decode_dev(dev), &sbuf);
+  	if (err)
+  		return err;
+  
+--- 393,404 ----
+  {
+  	struct compat_ustat tmp;
+  	struct kstatfs sbuf;
+! 	int err;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+!         err = vfs_ustat(new_decode_dev(dev), &sbuf);
+  	if (err)
+  		return err;
+  
+***************
+*** 422,427 ****
+--- 485,493 ----
+  	long ret;
+  	unsigned int conv_cmd;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	switch (cmd) {
+  	case F_GETLK:
+  	case F_SETLK:
+***************
+*** 506,511 ****
+--- 572,580 ----
+  	long ret;
+  	aio_context_t ctx64;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	mm_segment_t oldfs = get_fs();
+  	if (unlikely(get_user(ctx64, ctx32p)))
+  		return -EFAULT;
+***************
+*** 529,534 ****
+--- 598,606 ----
+  	struct timespec t;
+  	struct timespec __user *ut = NULL;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (timeout) {
+  		if (compat_get_timespec(&t, timeout))
+  			return -EFAULT;
+***************
+*** 639,644 ****
+--- 711,719 ----
+  	struct iocb __user * __user *iocb64; 
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (unlikely(nr < 0))
+  		return -EINVAL;
+  
+***************
+*** 796,801 ****
+--- 871,881 ----
+  	char *kernel_dev;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kernel_type = copy_mount_string(type);
+  	retval = PTR_ERR(kernel_type);
+  	if (IS_ERR(kernel_type))
+***************
+*** 1098,1103 ****
+--- 1178,1187 ----
+   */
+  COMPAT_SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags, umode_t, mode)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
+  	return do_sys_open(dfd, filename, flags, mode);
+  }
+  
+***************
+*** 1476,1481 ****
+--- 1560,1570 ----
+  COMPAT_SYSCALL_DEFINE3(open_by_handle_at, int, mountdirfd,
+  			     struct file_handle __user *, handle, int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return do_handle_open(mountdirfd, handle, flags);
+  }
+  #endif
+diff -crB linux-4.2/fs/compat_ioctl.c linux-4.2-sbox/fs/compat_ioctl.c
+*** linux-4.2/fs/compat_ioctl.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/compat_ioctl.c	Wed Feb 10 16:46:00 2016
+***************
+*** 1550,1555 ****
+--- 1550,1560 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED() && cmd != FIOCLEX && cmd != FIONCLEX) {
++ 		error = -EPERM;
++ 		goto out_fput;
++ 	}
++ 
+  	/* RED-PEN how should LSM module know it's handling 32bit? */
+  	error = security_file_ioctl(f.file, cmd, arg);
+  	if (error)
+diff -crB linux-4.2/fs/dcache.c linux-4.2-sbox/fs/dcache.c
+*** linux-4.2/fs/dcache.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/dcache.c	Wed Feb 10 16:46:00 2016
+***************
+*** 3242,3249 ****
+  {
+  	int error;
+  	struct path pwd, root;
+! 	char *page = __getname();
+  
+  	if (!page)
+  		return -ENOMEM;
+  
+--- 3242,3255 ----
+  {
+  	int error;
+  	struct path pwd, root;
+! 	char *page = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 copy_to_user(buf, "/SANDBOX", 9);
++                 return 9;
++         }
++ 
++         page = __getname();
+  	if (!page)
+  		return -ENOMEM;
+  
+diff -crB linux-4.2/fs/dcookies.c linux-4.2-sbox/fs/dcookies.c
+*** linux-4.2/fs/dcookies.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/dcookies.c	Wed Feb 10 16:46:00 2016
+***************
+*** 155,160 ****
+--- 155,165 ----
+  	size_t pathlen;
+  	struct dcookie_struct * dcs;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* we could leak path information to users
+  	 * without dir read permission without this
+  	 */
+diff -crB linux-4.2/fs/eventfd.c linux-4.2-sbox/fs/eventfd.c
+*** linux-4.2/fs/eventfd.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/eventfd.c	Wed Feb 10 16:46:00 2016
+***************
+*** 422,427 ****
+--- 422,430 ----
+  	int fd, error;
+  	struct file *file;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	error = get_unused_fd_flags(flags & EFD_SHARED_FCNTL_FLAGS);
+  	if (error < 0)
+  		return error;
+diff -crB linux-4.2/fs/eventpoll.c linux-4.2-sbox/fs/eventpoll.c
+*** linux-4.2/fs/eventpoll.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/eventpoll.c	Wed Feb 10 16:46:00 2016
+***************
+*** 1767,1772 ****
+--- 1767,1775 ----
+  	struct eventpoll *ep = NULL;
+  	struct file *file;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check the EPOLL_* constant for consistency.  */
+  	BUILD_BUG_ON(EPOLL_CLOEXEC != O_CLOEXEC);
+  
+***************
+*** 1828,1833 ****
+--- 1831,1839 ----
+  	struct epoll_event epds;
+  	struct eventpoll *tep = NULL;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	error = -EFAULT;
+  	if (ep_op_has_event(op) &&
+  	    copy_from_user(&epds, event, sizeof(struct epoll_event)))
+***************
+*** 1965,1970 ****
+--- 1971,1979 ----
+  	struct fd f;
+  	struct eventpoll *ep;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* The maximum number of event must be greater than zero */
+  	if (maxevents <= 0 || maxevents > EP_MAX_EVENTS)
+  		return -EINVAL;
+***************
+*** 2011,2016 ****
+--- 2020,2028 ----
+  	int error;
+  	sigset_t ksigmask, sigsaved;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/*
+  	 * If the caller wants a certain signal mask to be set during the wait,
+  	 * we apply it here.
+diff -crB linux-4.2/fs/exec.c linux-4.2-sbox/fs/exec.c
+*** linux-4.2/fs/exec.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/exec.c	Wed Feb 10 16:46:00 2016
+***************
+*** 121,126 ****
+--- 121,131 ----
+  	if (IS_ERR(tmp))
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 putname(tmp);
++                 return -EPERM;
++         }
++ 
+  	file = do_filp_open(AT_FDCWD, tmp, &uselib_flags);
+  	putname(tmp);
+  	error = PTR_ERR(file);
+***************
+*** 1486,1491 ****
+--- 1491,1505 ----
+  	struct files_struct *displaced;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED() && fd != AT_FDCWD) {
++                 retval = -EPERM;
++                 goto out_ret;
++         }
++         if ((current->sbox_flags & SBOX_NO_EXEC)) {
++                 SBOX_SET_SECURITY_ERR();
++                 goto out_ret;
++         }
++ 
+  	if (IS_ERR(filename))
+  		return PTR_ERR(filename);
+  
+***************
+*** 1595,1600 ****
+--- 1609,1617 ----
+  	putname(filename);
+  	if (displaced)
+  		put_files_struct(displaced);
++         if ((current->sbox_flags & SBOX_NO_SYSCALLS)) {
++                 current->sbox_flags |= SBOX_NO_EXEC;
++         }
+  	return retval;
+  
+  out:
+diff -crB linux-4.2/fs/fcntl.c linux-4.2-sbox/fs/fcntl.c
+*** linux-4.2/fs/fcntl.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/fcntl.c	Wed Feb 10 16:46:00 2016
+***************
+*** 361,366 ****
+--- 361,371 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED() && !check_fcntl_cmd(cmd)) {
++ 		err = -EPERM;
++                 goto out1;
++         }
++ 
+  	if (unlikely(f.file->f_mode & FMODE_PATH)) {
+  		if (!check_fcntl_cmd(cmd))
+  			goto out1;
+***************
+*** 386,391 ****
+--- 391,401 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED() && !check_fcntl_cmd(cmd)) {
++ 		err = -EPERM;
++                 goto out1;
++         }
++ 
+  	if (unlikely(f.file->f_mode & FMODE_PATH)) {
+  		if (!check_fcntl_cmd(cmd))
+  			goto out1;
+diff -crB linux-4.2/fs/fhandle.c linux-4.2-sbox/fs/fhandle.c
+*** linux-4.2/fs/fhandle.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/fhandle.c	Wed Feb 10 16:46:00 2016
+***************
+*** 97,102 ****
+--- 97,107 ----
+  	int lookup_flags;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if ((flag & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH)) != 0)
+  		return -EINVAL;
+  
+***************
+*** 258,263 ****
+--- 263,273 ----
+  {
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (force_o_largefile())
+  		flags |= O_LARGEFILE;
+  
+diff -crB linux-4.2/fs/filesystems.c linux-4.2-sbox/fs/filesystems.c
+*** linux-4.2/fs/filesystems.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/filesystems.c	Wed Feb 10 16:46:00 2016
+***************
+*** 185,190 ****
+--- 185,195 ----
+  {
+  	int retval = -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	switch (option) {
+  		case 1:
+  			retval = fs_index((const char __user *) arg1);
+diff -crB linux-4.2/fs/ioctl.c linux-4.2-sbox/fs/ioctl.c
+*** linux-4.2/fs/ioctl.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/ioctl.c	Wed Feb 10 16:46:00 2016
+***************
+*** 617,622 ****
+--- 617,628 ----
+  
+  	if (!f.file)
+  		return -EBADF;
++ 
++         if (SBOX_IS_RESTRICTED() && cmd != FIOCLEX && cmd != FIONCLEX) {
++                 fdput(f);
++                 return -EPERM;
++         }
++ 
+  	error = security_file_ioctl(f.file, cmd, arg);
+  	if (!error)
+  		error = do_vfs_ioctl(f.file, fd, cmd, arg);
+diff -crB linux-4.2/fs/locks.c linux-4.2-sbox/fs/locks.c
+*** linux-4.2/fs/locks.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/locks.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1904,1909 ****
+--- 1904,1914 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 fdput(f);
++                 return -EPERM;
++         }
++ 
+  	can_sleep = !(cmd & LOCK_NB);
+  	cmd &= ~LOCK_NB;
+  	unlock = (cmd == LOCK_UN);
+diff -crB linux-4.2/fs/namei.c linux-4.2-sbox/fs/namei.c
+*** linux-4.2/fs/namei.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/namei.c	Wed Feb 10 16:46:01 2016
+***************
+*** 3518,3523 ****
+--- 3518,3528 ----
+  	int error;
+  	unsigned int lookup_flags = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	error = may_mknod(mode);
+  	if (error)
+  		return error;
+***************
+*** 3590,3595 ****
+--- 3595,3605 ----
+  	int error;
+  	unsigned int lookup_flags = LOOKUP_DIRECTORY;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  retry:
+  	dentry = user_path_create(dfd, pathname, &path, lookup_flags);
+  	if (IS_ERR(dentry))
+***************
+*** 3738,3743 ****
+--- 3748,3756 ----
+  
+  SYSCALL_DEFINE1(rmdir, const char __user *, pathname)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
+  	return do_rmdir(AT_FDCWD, pathname);
+  }
+  
+***************
+*** 3880,3885 ****
+--- 3893,3902 ----
+  
+  SYSCALL_DEFINE3(unlinkat, int, dfd, const char __user *, pathname, int, flag)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	if ((flag & ~AT_REMOVEDIR) != 0)
+  		return -EINVAL;
+  
+***************
+*** 3891,3896 ****
+--- 3908,3917 ----
+  
+  SYSCALL_DEFINE1(unlink, const char __user *, pathname)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	return do_unlinkat(AT_FDCWD, pathname);
+  }
+  
+***************
+*** 3924,3929 ****
+--- 3945,3954 ----
+  	struct path path;
+  	unsigned int lookup_flags = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	from = getname(oldname);
+  	if (IS_ERR(from))
+  		return PTR_ERR(from);
+***************
+*** 4042,4047 ****
+--- 4067,4076 ----
+  	int how = 0;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	if ((flags & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH)) != 0)
+  		return -EINVAL;
+  	/*
+***************
+*** 4301,4306 ****
+--- 4330,4339 ----
+  	bool should_retry = false;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE | RENAME_WHITEOUT))
+  		return -EINVAL;
+  
+diff -crB linux-4.2/fs/namespace.c linux-4.2-sbox/fs/namespace.c
+*** linux-4.2/fs/namespace.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/namespace.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1599,1604 ****
+--- 1599,1609 ----
+  	int retval;
+  	int lookup_flags = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & ~(MNT_FORCE | MNT_DETACH | MNT_EXPIRE | UMOUNT_NOFOLLOW))
+  		return -EINVAL;
+  
+***************
+*** 2898,2903 ****
+--- 2903,2913 ----
+  	char *kernel_dev;
+  	unsigned long data_page;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kernel_type = copy_mount_string(type);
+  	ret = PTR_ERR(kernel_type);
+  	if (IS_ERR(kernel_type))
+***************
+*** 2982,2987 ****
+--- 2992,3002 ----
+  	struct mountpoint *old_mp, *root_mp;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!may_mount())
+  		return -EPERM;
+  
+diff -crB linux-4.2/fs/notify/fanotify/fanotify_user.c linux-4.2-sbox/fs/notify/fanotify/fanotify_user.c
+*** linux-4.2/fs/notify/fanotify/fanotify_user.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/notify/fanotify/fanotify_user.c	Wed Feb 10 16:46:01 2016
+***************
+*** 694,699 ****
+--- 694,702 ----
+  	struct user_struct *user;
+  	struct fanotify_event_info *oevent;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	pr_debug("%s: flags=%d event_f_flags=%d\n",
+  		__func__, flags, event_f_flags);
+  
+***************
+*** 808,813 ****
+--- 811,819 ----
+  	struct path path;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	pr_debug("%s: fanotify_fd=%d flags=%x dfd=%d pathname=%p mask=%llx\n",
+  		 __func__, fanotify_fd, flags, dfd, pathname, mask);
+  
+diff -crB linux-4.2/fs/notify/inotify/inotify_user.c linux-4.2-sbox/fs/notify/inotify/inotify_user.c
+*** linux-4.2/fs/notify/inotify/inotify_user.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/notify/inotify/inotify_user.c	Wed Feb 10 16:46:01 2016
+***************
+*** 671,676 ****
+--- 671,679 ----
+  	struct fsnotify_group *group;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check the IN_* constants for consistency.  */
+  	BUILD_BUG_ON(IN_CLOEXEC != O_CLOEXEC);
+  	BUILD_BUG_ON(IN_NONBLOCK != O_NONBLOCK);
+***************
+*** 706,711 ****
+--- 709,717 ----
+  	int ret;
+  	unsigned flags = 0;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* don't allow invalid bits: we don't want flags set */
+  	if (unlikely(!(mask & ALL_INOTIFY_BITS)))
+  		return -EINVAL;
+***************
+*** 748,753 ****
+--- 754,762 ----
+  	struct fd f;
+  	int ret = 0;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	f = fdget(fd);
+  	if (unlikely(!f.file))
+  		return -EBADF;
+diff -crB linux-4.2/fs/open.c linux-4.2-sbox/fs/open.c
+*** linux-4.2/fs/open.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/open.c	Wed Feb 10 16:46:01 2016
+***************
+*** 34,39 ****
+--- 34,87 ----
+  
+  #include "internal.h"
+  
++ static const char * const secure_paths[] =
++ {
++         "/lib/", "/lib32/", "/lib64/",
++         "/usr/lib/", "/usr/lib32/", "/usr/lib64/",
++         "/usr/include/", "/usr/libexec/",
++         "/usr/local/lib/", "/usr/local/lib32/", "/usr/local/lib64/",
++         "/usr/local/include/", "/usr/local/libexec/",
++         "/bin/", "/usr/bin/", "/usr/local/bin/",
++         "/usr/share/", "/usr/local/share/", "/dev/urandom", "/dev/zero", "/dev/null",
++         "/SANDBOX/",
++         NULL
++ };
++ 
++ int cher_patch_is_secure_path(const char *path)
++ {
++         const char *s;
++         int i;
++ 
++         if (strstr(path, ".."))
++                 return -1;
++         for (i = 0; secure_paths[i] && strncmp(path, secure_paths[i], strlen(secure_paths[i])); ++i);
++         if (secure_paths[i]) {
++                 return 0;
++         }
++ 
++         if (!strncmp(path, "/SANDBOX/", 9)) path += 9;
++         s = path;
++         while (s[0] == '.' && s[1] == '/') s += 2;
++         for (; *s && *s != '/'; s++);
++         if (*s == '/') return -1;
++         return 0;
++ }
++ 
++ int cher_check_user_path(int dfd, const char __user **p_path)
++ {
++         struct filename *tmp = NULL;
++         if (dfd != AT_FDCWD) return -EPERM;
++         tmp = getname(*p_path);
++         if (IS_ERR(tmp)) return -EINVAL;
++         if (cher_patch_is_secure_path(tmp->name) < 0) {
++                 putname(tmp);
++                 return -EPERM;
++         }
++         if (!strncmp("/SANDBOX/", tmp->name, 9)) *p_path += 9;
++         putname(tmp);
++         return 0;
++ }
++ 
+  int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
+  	struct file *filp)
+  {
+***************
+*** 141,152 ****
+--- 189,206 ----
+  
+  SYSCALL_DEFINE2(truncate, const char __user *, path, long, length)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_sys_truncate(path, length);
+  }
+  
+  #ifdef CONFIG_COMPAT
+  COMPAT_SYSCALL_DEFINE2(truncate, const char __user *, path, compat_off_t, length)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_sys_truncate(path, length);
+  }
+  #endif
+***************
+*** 214,224 ****
+--- 268,284 ----
+  #if BITS_PER_LONG == 32
+  SYSCALL_DEFINE2(truncate64, const char __user *, path, loff_t, length)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_sys_truncate(path, length);
+  }
+  
+  SYSCALL_DEFINE2(ftruncate64, unsigned int, fd, loff_t, length)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_sys_ftruncate(fd, length, 0);
+  }
+  #endif /* BITS_PER_LONG == 32 */
+***************
+*** 319,327 ****
+  
+  SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+  {
+! 	struct fd f = fdget(fd);
+  	int error = -EBADF;
+  
+  	if (f.file) {
+  		error = vfs_fallocate(f.file, mode, offset, len);
+  		fdput(f);
+--- 379,391 ----
+  
+  SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+  {
+! 	struct fd f;
+  	int error = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
++         f = fdget(fd);
+  	if (f.file) {
+  		error = vfs_fallocate(f.file, mode, offset, len);
+  		fdput(f);
+***************
+*** 343,348 ****
+--- 407,417 ----
+  	int res;
+  	unsigned int lookup_flags = LOOKUP_FOLLOW;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 res = cher_check_user_path(dfd, &filename);
++                 if (res < 0) return res;
++         }
++ 
+  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+  		return -EINVAL;
+  
+***************
+*** 420,425 ****
+--- 489,498 ----
+  	struct path path;
+  	int error;
+  	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
++ 
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  retry:
+  	error = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
+  	if (error)
+***************
+*** 451,456 ****
+--- 524,534 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = -EPERM;
++                 goto out_putf;
++         }
++ 
+  	inode = file_inode(f.file);
+  
+  	error = -ENOTDIR;
+***************
+*** 471,476 ****
+--- 549,560 ----
+  	struct path path;
+  	int error;
+  	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
++ 
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  retry:
+  	error = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
+  	if (error)
+***************
+*** 530,538 ****
+  
+  SYSCALL_DEFINE2(fchmod, unsigned int, fd, umode_t, mode)
+  {
+! 	struct fd f = fdget(fd);
+  	int err = -EBADF;
+  
+  	if (f.file) {
+  		audit_file(f.file);
+  		err = chmod_common(&f.file->f_path, mode);
+--- 614,628 ----
+  
+  SYSCALL_DEFINE2(fchmod, unsigned int, fd, umode_t, mode)
+  {
+! 	struct fd f;
+  	int err = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         f = fdget(fd);
+  	if (f.file) {
+  		audit_file(f.file);
+  		err = chmod_common(&f.file->f_path, mode);
+***************
+*** 546,551 ****
+--- 636,647 ----
+  	struct path path;
+  	int error;
+  	unsigned int lookup_flags = LOOKUP_FOLLOW;
++ 
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  retry:
+  	error = user_path_at(dfd, filename, lookup_flags, &path);
+  	if (!error) {
+***************
+*** 613,618 ****
+--- 709,719 ----
+  	int error = -EINVAL;
+  	int lookup_flags;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if ((flag & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
+  		goto out;
+  
+***************
+*** 657,662 ****
+--- 758,769 ----
+  	if (!f.file)
+  		goto out;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 error = -EPERM;
++                 goto out_fput;
++         }
++ 
+  	error = mnt_want_write_file(f.file);
+  	if (error)
+  		goto out_fput;
+***************
+*** 1010,1018 ****
+  long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+  {
+  	struct open_flags op;
+! 	int fd = build_open_flags(flags, mode, &op);
+  	struct filename *tmp;
+  
+  	if (fd)
+  		return fd;
+  
+--- 1117,1132 ----
+  long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+  {
+  	struct open_flags op;
+! 	int fd = 0;
+  	struct filename *tmp;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 int res = cher_check_user_path(dfd, &filename);
++                 if (res < 0) return res;
++                 flags &= ~(O_CREAT | O_EXCL);
++         }
++ 
++ 	fd = build_open_flags(flags, mode, &op);
+  	if (fd)
+  		return fd;
+  
+***************
+*** 1117,1122 ****
+--- 1231,1239 ----
+   */
+  SYSCALL_DEFINE0(vhangup)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (capable(CAP_SYS_TTY_CONFIG)) {
+  		tty_vhangup_self();
+  		return 0;
+diff -crB linux-4.2/fs/pipe.c linux-4.2-sbox/fs/pipe.c
+*** linux-4.2/fs/pipe.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/pipe.c	Wed Feb 10 16:46:01 2016
+***************
+*** 780,785 ****
+--- 780,790 ----
+  	int fd[2];
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	error = __do_pipe_flags(fd, files, flags);
+  	if (!error) {
+  		if (unlikely(copy_to_user(fildes, fd, sizeof(fd)))) {
+diff -crB linux-4.2/fs/proc/base.c linux-4.2-sbox/fs/proc/base.c
+*** linux-4.2/fs/proc/base.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/proc/base.c	Wed Feb 10 16:46:01 2016
+***************
+*** 613,618 ****
+--- 613,619 ----
+  	[RLIMIT_NICE] = {"Max nice priority", NULL},
+  	[RLIMIT_RTPRIO] = {"Max realtime priority", NULL},
+  	[RLIMIT_RTTIME] = {"Max realtime timeout", "us"},
++     [RLIMIT_MCPU] = {"Max cpu time", "ms"}
+  };
+  
+  /* Display limits for a process */
+diff -crB linux-4.2/fs/quota/compat.c linux-4.2-sbox/fs/quota/compat.c
+*** linux-4.2/fs/quota/compat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/quota/compat.c	Wed Feb 10 16:46:01 2016
+***************
+*** 52,57 ****
+--- 52,62 ----
+  	u16 xdata;
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	cmds = cmd >> SUBCMDSHIFT;
+  
+  	switch (cmds) {
+diff -crB linux-4.2/fs/quota/quota.c linux-4.2-sbox/fs/quota/quota.c
+*** linux-4.2/fs/quota/quota.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/quota/quota.c	Wed Feb 10 16:46:01 2016
+***************
+*** 765,770 ****
+--- 765,775 ----
+  	struct path path, *pathp = NULL;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	cmds = cmd >> SUBCMDSHIFT;
+  	type = cmd & SUBCMDMASK;
+  
+diff -crB linux-4.2/fs/read_write.c linux-4.2-sbox/fs/read_write.c
+*** linux-4.2/fs/read_write.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/read_write.c	Wed Feb 10 16:46:01 2016
+***************
+*** 597,602 ****
+--- 597,605 ----
+  	struct fd f;
+  	ssize_t ret = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  
+***************
+*** 617,622 ****
+--- 620,628 ----
+  	struct fd f;
+  	ssize_t ret = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  
+***************
+*** 902,907 ****
+--- 908,916 ----
+  	struct fd f;
+  	ssize_t ret = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  
+***************
+*** 926,931 ****
+--- 935,943 ----
+  	struct fd f;
+  	ssize_t ret = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  
+***************
+*** 1044,1049 ****
+--- 1056,1064 ----
+  	struct fd f;
+  	ssize_t ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  	f = fdget(fd);
+***************
+*** 1121,1126 ****
+--- 1136,1144 ----
+  	struct fd f;
+  	ssize_t ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (pos < 0)
+  		return -EINVAL;
+  	f = fdget(fd);
+diff -crB linux-4.2/fs/signalfd.c linux-4.2-sbox/fs/signalfd.c
+*** linux-4.2/fs/signalfd.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/signalfd.c	Wed Feb 10 16:46:01 2016
+***************
+*** 258,263 ****
+--- 258,266 ----
+  	sigset_t sigmask;
+  	struct signalfd_ctx *ctx;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check the SFD_* constants for consistency.  */
+  	BUILD_BUG_ON(SFD_CLOEXEC != O_CLOEXEC);
+  	BUILD_BUG_ON(SFD_NONBLOCK != O_NONBLOCK);
+***************
+*** 322,327 ****
+--- 325,333 ----
+  	sigset_t tmp;
+  	sigset_t __user *ksigmask;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (sigsetsize != sizeof(compat_sigset_t))
+  		return -EINVAL;
+  	if (copy_from_user(&ss32, sigmask, sizeof(ss32)))
+diff -crB linux-4.2/fs/splice.c linux-4.2-sbox/fs/splice.c
+*** linux-4.2/fs/splice.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/splice.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1635,1640 ****
+--- 1635,1643 ----
+  	struct fd f;
+  	long error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (unlikely(nr_segs > UIO_MAXIOV))
+  		return -EINVAL;
+  	else if (unlikely(!nr_segs))
+***************
+*** 1660,1665 ****
+--- 1663,1672 ----
+  {
+  	unsigned i;
+  	struct iovec __user *iov;
++ 
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (nr_segs > UIO_MAXIOV)
+  		return -EINVAL;
+  	iov = compat_alloc_user_space(nr_segs * sizeof(struct iovec));
+***************
+*** 1682,1687 ****
+--- 1689,1697 ----
+  	struct fd in, out;
+  	long error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (unlikely(!len))
+  		return 0;
+  
+***************
+*** 2013,2018 ****
+--- 2023,2031 ----
+  	struct fd in;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (unlikely(!len))
+  		return 0;
+  
+diff -crB linux-4.2/fs/stat.c linux-4.2-sbox/fs/stat.c
+*** linux-4.2/fs/stat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/stat.c	Wed Feb 10 16:46:01 2016
+***************
+*** 18,23 ****
+--- 18,25 ----
+  #include <asm/uaccess.h>
+  #include <asm/unistd.h>
+  
++ int cher_check_user_path(int dfd, const char __user **p_path);
++ 
+  void generic_fillattr(struct inode *inode, struct kstat *stat)
+  {
+  	stat->dev = inode->i_sb->s_dev;
+***************
+*** 180,185 ****
+--- 182,192 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(AT_FDCWD, &filename);
++                 if (error < 0) return error;
++         }
++ 
+  	error = vfs_stat(filename, &stat);
+  	if (error)
+  		return error;
+***************
+*** 193,198 ****
+--- 200,210 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(AT_FDCWD, &filename);
++                 if (error < 0) return error;
++         }
++ 
+  	error = vfs_lstat(filename, &stat);
+  	if (error)
+  		return error;
+***************
+*** 267,274 ****
+  		struct stat __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error = vfs_stat(filename, &stat);
+  
+  	if (error)
+  		return error;
+  	return cp_new_stat(&stat, statbuf);
+--- 279,292 ----
+  		struct stat __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(AT_FDCWD, &filename);
++                 if (error < 0) return error;
++         }
++ 
++ 	error = vfs_stat(filename, &stat);
+  	if (error)
+  		return error;
+  	return cp_new_stat(&stat, statbuf);
+***************
+*** 280,285 ****
+--- 298,308 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(AT_FDCWD, &filename);
++                 if (error < 0) return error;
++         }
++ 
+  	error = vfs_lstat(filename, &stat);
+  	if (error)
+  		return error;
+***************
+*** 294,299 ****
+--- 317,327 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(dfd, &filename);
++                 if (error < 0) return error;
++         }
++ 
+  	error = vfs_fstatat(dfd, filename, &stat, flag);
+  	if (error)
+  		return error;
+***************
+*** 320,325 ****
+--- 348,358 ----
+  	int empty = 0;
+  	unsigned int lookup_flags = LOOKUP_EMPTY;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(dfd, &pathname);
++                 if (error < 0) return error;
++         }
++ 
+  	if (bufsiz <= 0)
+  		return -EINVAL;
+  
+***************
+*** 401,408 ****
+  		struct stat64 __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error = vfs_stat(filename, &stat);
+  
+  	if (!error)
+  		error = cp_new_stat64(&stat, statbuf);
+  
+--- 434,447 ----
+  		struct stat64 __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(AT_FDCWD, &filename);
++                 if (error < 0) return error;
++         }
++ 
++ 	error = vfs_stat(filename, &stat);
+  	if (!error)
+  		error = cp_new_stat64(&stat, statbuf);
+  
+***************
+*** 413,420 ****
+  		struct stat64 __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error = vfs_lstat(filename, &stat);
+  
+  	if (!error)
+  		error = cp_new_stat64(&stat, statbuf);
+  
+--- 452,465 ----
+  		struct stat64 __user *, statbuf)
+  {
+  	struct kstat stat;
+! 	int error;
+! 
+!         if (SBOX_IS_RESTRICTED()) {
+!                 error = cher_check_user_path(AT_FDCWD, &filename);
+!                 if (error < 0) return error;
+!         }
+  
++ 	error = vfs_lstat(filename, &stat);
+  	if (!error)
+  		error = cp_new_stat64(&stat, statbuf);
+  
+***************
+*** 438,443 ****
+--- 483,493 ----
+  	struct kstat stat;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 error = cher_check_user_path(dfd, &filename);
++                 if (error < 0) return error;
++         }
++ 
+  	error = vfs_fstatat(dfd, filename, &stat, flag);
+  	if (error)
+  		return error;
+diff -crB linux-4.2/fs/statfs.c linux-4.2-sbox/fs/statfs.c
+*** linux-4.2/fs/statfs.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/statfs.c	Wed Feb 10 16:46:01 2016
+***************
+*** 172,178 ****
+  SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, buf)
+  {
+  	struct kstatfs st;
+! 	int error = user_statfs(pathname, &st);
+  	if (!error)
+  		error = do_statfs_native(&st, buf);
+  	return error;
+--- 172,183 ----
+  SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, buf)
+  {
+  	struct kstatfs st;
+! 	int error;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+! 	error = user_statfs(pathname, &st);
+  	if (!error)
+  		error = do_statfs_native(&st, buf);
+  	return error;
+***************
+*** 182,187 ****
+--- 187,196 ----
+  {
+  	struct kstatfs st;
+  	int error;
++ 
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (sz != sizeof(*buf))
+  		return -EINVAL;
+  	error = user_statfs(pathname, &st);
+***************
+*** 193,199 ****
+  SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct statfs __user *, buf)
+  {
+  	struct kstatfs st;
+! 	int error = fd_statfs(fd, &st);
+  	if (!error)
+  		error = do_statfs_native(&st, buf);
+  	return error;
+--- 202,213 ----
+  SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct statfs __user *, buf)
+  {
+  	struct kstatfs st;
+! 	int error;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+! 	error = fd_statfs(fd, &st);
+  	if (!error)
+  		error = do_statfs_native(&st, buf);
+  	return error;
+***************
+*** 204,209 ****
+--- 218,226 ----
+  	struct kstatfs st;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (sz != sizeof(*buf))
+  		return -EINVAL;
+  
+***************
+*** 229,235 ****
+  {
+  	struct ustat tmp;
+  	struct kstatfs sbuf;
+! 	int err = vfs_ustat(new_decode_dev(dev), &sbuf);
+  	if (err)
+  		return err;
+  
+--- 246,257 ----
+  {
+  	struct ustat tmp;
+  	struct kstatfs sbuf;
+! 	int err;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+! 	err = vfs_ustat(new_decode_dev(dev), &sbuf);
+  	if (err)
+  		return err;
+  
+diff -crB linux-4.2/fs/sync.c linux-4.2-sbox/fs/sync.c
+*** linux-4.2/fs/sync.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/sync.c	Wed Feb 10 16:46:01 2016
+***************
+*** 103,108 ****
+--- 103,111 ----
+  {
+  	int nowait = 0, wait = 1;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	wakeup_flusher_threads(0, WB_REASON_SYNC);
+  	iterate_supers(sync_inodes_one_sb, NULL);
+  	iterate_supers(sync_fs_one_sb, &nowait);
+***************
+*** 148,157 ****
+   */
+  SYSCALL_DEFINE1(syncfs, int, fd)
+  {
+! 	struct fd f = fdget(fd);
+  	struct super_block *sb;
+  	int ret;
+  
+  	if (!f.file)
+  		return -EBADF;
+  	sb = f.file->f_path.dentry->d_sb;
+--- 151,164 ----
+   */
+  SYSCALL_DEFINE1(syncfs, int, fd)
+  {
+! 	struct fd f;
+  	struct super_block *sb;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
++         f = fdget(fd);
+  	if (!f.file)
+  		return -EBADF;
+  	sb = f.file->f_path.dentry->d_sb;
+***************
+*** 219,229 ****
+--- 226,242 ----
+  
+  SYSCALL_DEFINE1(fsync, unsigned int, fd)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_fsync(fd, 0);
+  }
+  
+  SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return do_fsync(fd, 1);
+  }
+  
+***************
+*** 283,288 ****
+--- 296,304 ----
+  	loff_t endbyte;			/* inclusive */
+  	umode_t i_mode;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	ret = -EINVAL;
+  	if (flags & ~VALID_FLAGS)
+  		goto out;
+diff -crB linux-4.2/fs/timerfd.c linux-4.2-sbox/fs/timerfd.c
+*** linux-4.2/fs/timerfd.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/timerfd.c	Wed Feb 10 16:46:01 2016
+***************
+*** 378,383 ****
+--- 378,386 ----
+  	int ufd;
+  	struct timerfd_ctx *ctx;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check the TFD_* constants for consistency.  */
+  	BUILD_BUG_ON(TFD_CLOEXEC != O_CLOEXEC);
+  	BUILD_BUG_ON(TFD_NONBLOCK != O_NONBLOCK);
+***************
+*** 518,523 ****
+--- 521,529 ----
+  	struct itimerspec new, old;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (copy_from_user(&new, utmr, sizeof(new)))
+  		return -EFAULT;
+  	ret = do_timerfd_settime(ufd, flags, &new, &old);
+***************
+*** 532,538 ****
+  SYSCALL_DEFINE2(timerfd_gettime, int, ufd, struct itimerspec __user *, otmr)
+  {
+  	struct itimerspec kotmr;
+! 	int ret = do_timerfd_gettime(ufd, &kotmr);
+  	if (ret)
+  		return ret;
+  	return copy_to_user(otmr, &kotmr, sizeof(kotmr)) ? -EFAULT: 0;
+--- 538,549 ----
+  SYSCALL_DEFINE2(timerfd_gettime, int, ufd, struct itimerspec __user *, otmr)
+  {
+  	struct itimerspec kotmr;
+! 	int ret;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+! 	ret = do_timerfd_gettime(ufd, &kotmr);
+  	if (ret)
+  		return ret;
+  	return copy_to_user(otmr, &kotmr, sizeof(kotmr)) ? -EFAULT: 0;
+***************
+*** 546,551 ****
+--- 557,565 ----
+  	struct itimerspec new, old;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (get_compat_itimerspec(&new, utmr))
+  		return -EFAULT;
+  	ret = do_timerfd_settime(ufd, flags, &new, &old);
+***************
+*** 560,566 ****
+  		struct compat_itimerspec __user *, otmr)
+  {
+  	struct itimerspec kotmr;
+! 	int ret = do_timerfd_gettime(ufd, &kotmr);
+  	if (ret)
+  		return ret;
+  	return put_compat_itimerspec(otmr, &kotmr) ? -EFAULT: 0;
+--- 574,585 ----
+  		struct compat_itimerspec __user *, otmr)
+  {
+  	struct itimerspec kotmr;
+! 	int ret;
+! 
+!         if (SBOX_IS_RESTRICTED())
+!                 return -EPERM;
+! 
+! 	ret = do_timerfd_gettime(ufd, &kotmr);
+  	if (ret)
+  		return ret;
+  	return put_compat_itimerspec(otmr, &kotmr) ? -EFAULT: 0;
+diff -crB linux-4.2/fs/utimes.c linux-4.2-sbox/fs/utimes.c
+*** linux-4.2/fs/utimes.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/utimes.c	Wed Feb 10 16:46:01 2016
+***************
+*** 28,33 ****
+--- 28,36 ----
+  {
+  	struct timespec tv[2];
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (times) {
+  		if (get_user(tv[0].tv_sec, &times->actime) ||
+  		    get_user(tv[1].tv_sec, &times->modtime))
+***************
+*** 187,192 ****
+--- 190,198 ----
+  {
+  	struct timespec tstimes[2];
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (utimes) {
+  		if (copy_from_user(&tstimes, utimes, sizeof(tstimes)))
+  			return -EFAULT;
+***************
+*** 206,211 ****
+--- 212,220 ----
+  	struct timeval times[2];
+  	struct timespec tstimes[2];
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (utimes) {
+  		if (copy_from_user(&times, utimes, sizeof(times)))
+  			return -EFAULT;
+diff -crB linux-4.2/fs/xattr.c linux-4.2-sbox/fs/xattr.c
+*** linux-4.2/fs/xattr.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/fs/xattr.c	Wed Feb 10 16:46:01 2016
+***************
+*** 391,396 ****
+--- 391,401 ----
+  		const char __user *, name, const void __user *, value,
+  		size_t, size, int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_setxattr(pathname, name, value, size, flags, LOOKUP_FOLLOW);
+  }
+  
+***************
+*** 398,412 ****
+  		const char __user *, name, const void __user *, value,
+  		size_t, size, int, flags)
+  {
+  	return path_setxattr(pathname, name, value, size, flags, 0);
+  }
+  
+  SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
+  		const void __user *,value, size_t, size, int, flags)
+  {
+! 	struct fd f = fdget(fd);
+  	int error = -EBADF;
+  
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+--- 403,428 ----
+  		const char __user *, name, const void __user *, value,
+  		size_t, size, int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_setxattr(pathname, name, value, size, flags, 0);
+  }
+  
+  SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
+  		const void __user *,value, size_t, size, int, flags)
+  {
+! 	struct fd f;
+  	int error = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         f = fdget(fd);
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+***************
+*** 490,510 ****
+  SYSCALL_DEFINE4(getxattr, const char __user *, pathname,
+  		const char __user *, name, void __user *, value, size_t, size)
+  {
+  	return path_getxattr(pathname, name, value, size, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE4(lgetxattr, const char __user *, pathname,
+  		const char __user *, name, void __user *, value, size_t, size)
+  {
+  	return path_getxattr(pathname, name, value, size, 0);
+  }
+  
+  SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
+  		void __user *, value, size_t, size)
+  {
+! 	struct fd f = fdget(fd);
+  	ssize_t error = -EBADF;
+  
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+--- 506,542 ----
+  SYSCALL_DEFINE4(getxattr, const char __user *, pathname,
+  		const char __user *, name, void __user *, value, size_t, size)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_getxattr(pathname, name, value, size, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE4(lgetxattr, const char __user *, pathname,
+  		const char __user *, name, void __user *, value, size_t, size)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_getxattr(pathname, name, value, size, 0);
+  }
+  
+  SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
+  		void __user *, value, size_t, size)
+  {
+! 	struct fd f;
+  	ssize_t error = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         f = fdget(fd);
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+***************
+*** 572,591 ****
+  SYSCALL_DEFINE3(listxattr, const char __user *, pathname, char __user *, list,
+  		size_t, size)
+  {
+  	return path_listxattr(pathname, list, size, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE3(llistxattr, const char __user *, pathname, char __user *, list,
+  		size_t, size)
+  {
+  	return path_listxattr(pathname, list, size, 0);
+  }
+  
+  SYSCALL_DEFINE3(flistxattr, int, fd, char __user *, list, size_t, size)
+  {
+! 	struct fd f = fdget(fd);
+  	ssize_t error = -EBADF;
+  
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+--- 604,639 ----
+  SYSCALL_DEFINE3(listxattr, const char __user *, pathname, char __user *, list,
+  		size_t, size)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_listxattr(pathname, list, size, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE3(llistxattr, const char __user *, pathname, char __user *, list,
+  		size_t, size)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_listxattr(pathname, list, size, 0);
+  }
+  
+  SYSCALL_DEFINE3(flistxattr, int, fd, char __user *, list, size_t, size)
+  {
+! 	struct fd f;
+  	ssize_t error = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         f = fdget(fd);
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+***************
+*** 637,656 ****
+  SYSCALL_DEFINE2(removexattr, const char __user *, pathname,
+  		const char __user *, name)
+  {
+  	return path_removexattr(pathname, name, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE2(lremovexattr, const char __user *, pathname,
+  		const char __user *, name)
+  {
+  	return path_removexattr(pathname, name, 0);
+  }
+  
+  SYSCALL_DEFINE2(fremovexattr, int, fd, const char __user *, name)
+  {
+! 	struct fd f = fdget(fd);
+  	int error = -EBADF;
+  
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+--- 685,720 ----
+  SYSCALL_DEFINE2(removexattr, const char __user *, pathname,
+  		const char __user *, name)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_removexattr(pathname, name, LOOKUP_FOLLOW);
+  }
+  
+  SYSCALL_DEFINE2(lremovexattr, const char __user *, pathname,
+  		const char __user *, name)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return path_removexattr(pathname, name, 0);
+  }
+  
+  SYSCALL_DEFINE2(fremovexattr, int, fd, const char __user *, name)
+  {
+! 	struct fd f;
+  	int error = -EBADF;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         f = fdget(fd);
+  	if (!f.file)
+  		return error;
+  	audit_file(f.file);
+diff -crB linux-4.2/include/asm-generic/cputime_jiffies.h linux-4.2-sbox/include/asm-generic/cputime_jiffies.h
+*** linux-4.2/include/asm-generic/cputime_jiffies.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/asm-generic/cputime_jiffies.h	Wed Feb 10 16:46:01 2016
+***************
+*** 73,76 ****
+--- 73,81 ----
+  #define cputime64_to_clock_t(__ct)	\
+  	jiffies_64_to_clock_t(cputime64_to_jiffies64(__ct))
+  
++ #define msecs_to_cputime(msec)  \
++     (((msec) * HZ) / 1000)
++ #define cputime_to_msecs(jif)   \
++     ((jif) * 1000 / HZ)
++ 
+  #endif
+diff -crB linux-4.2/include/asm-generic/resource.h linux-4.2-sbox/include/asm-generic/resource.h
+*** linux-4.2/include/asm-generic/resource.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/asm-generic/resource.h	Wed Feb 10 16:46:01 2016
+***************
+*** 25,30 ****
+--- 25,31 ----
+  	[RLIMIT_NICE]		= { 0, 0 },				\
+  	[RLIMIT_RTPRIO]		= { 0, 0 },				\
+  	[RLIMIT_RTTIME]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
++ 	[RLIMIT_MCPU]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
+  }
+  
+  #endif
+diff -crB linux-4.2/include/linux/posix-timers.h linux-4.2-sbox/include/linux/posix-timers.h
+*** linux-4.2/include/linux/posix-timers.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/linux/posix-timers.h	Wed Feb 10 16:46:01 2016
+***************
+*** 137,141 ****
+--- 137,142 ----
+  long clock_nanosleep_restart(struct restart_block *restart_block);
+  
+  void update_rlimit_cpu(struct task_struct *task, unsigned long rlim_new);
++ void update_rlimit_mcpu(struct task_struct *task, unsigned long rlim_new);
+  
+  #endif
+diff -crB linux-4.2/include/linux/sched.h linux-4.2-sbox/include/linux/sched.h
+*** linux-4.2/include/linux/sched.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/linux/sched.h	Wed Feb 10 16:52:41 2016
+***************
+*** 1341,1347 ****
+--- 1341,1359 ----
+  	perf_nr_task_contexts,
+  };
+  
++ /* sandbox flags */
++ enum {
++ 	SBOX_NO_SYSCALLS  = 1,   /* disable most "dangerous" syscalls */
++ 	SBOX_NO_EXEC      = 2,   /* disable exec syscall */
++ 	SBOX_MEMLIMITON   = 4,   /* enable memory limit check */
++ 	SBOX_WAS_MEMLIMIT = 8,   /* memory limit happened?  */
++ 	SBOX_WAS_SECURITY = 16,  /* was security violation? */
++ 	SBOX_TLON         = 32,  /* enable kernel time limit check */
++ 	SBOX_WAS_TL       = 64   /* was time limit? */
++ };
++ 
+  struct task_struct {
++ 	int sbox_flags;         /* Sandbox flags */
+  	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
+  	void *stack;
+  	atomic_t usage;
+***************
+*** 1792,1797 ****
+--- 1804,1817 ----
+  # define arch_task_struct_size (sizeof(struct task_struct))
+  #endif
+  
++ #define SBOX_IS_RESTRICTED() unlikely(current->sbox_flags & SBOX_NO_SYSCALLS)
++ #define SBOX_SET_SECURITY_ERR() (current->sbox_flags |= SBOX_WAS_SECURITY)
++ #define SBOX_SET_TL_ERR() (current->sbox_flags |= SBOX_WAS_TL)
++ 
++ #define SBOX_IS_MEMLIMIT_ERR(p) (p->sbox_flags & SBOX_WAS_MEMLIMIT)
++ #define SBOX_IS_SECURITY_ERR(p) (p->sbox_flags & SBOX_WAS_SECURITY)
++ #define SBOX_IS_TL_ERR(p) (p->sbox_flags & SBOX_WAS_TL)
++ 
+  /* Future-safe accessor for struct task_struct's cpus_allowed. */
+  #define tsk_cpus_allowed(tsk) (&(tsk)->cpus_allowed)
+  
+diff -crB linux-4.2/include/uapi/asm-generic/resource.h linux-4.2-sbox/include/uapi/asm-generic/resource.h
+*** linux-4.2/include/uapi/asm-generic/resource.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/uapi/asm-generic/resource.h	Wed Feb 10 16:46:01 2016
+***************
+*** 45,51 ****
+  					   0-39 for nice level 19 .. -20 */
+  #define RLIMIT_RTPRIO		14	/* maximum realtime priority */
+  #define RLIMIT_RTTIME		15	/* timeout for RT tasks in us */
+! #define RLIM_NLIMITS		16
+  
+  /*
+   * SuS says limits have to be unsigned.
+--- 45,52 ----
+  					   0-39 for nice level 19 .. -20 */
+  #define RLIMIT_RTPRIO		14	/* maximum realtime priority */
+  #define RLIMIT_RTTIME		15	/* timeout for RT tasks in us */
+! #define RLIMIT_MCPU         16  /* millisecond cpu limit */
+! #define RLIM_NLIMITS		17
+  
+  /*
+   * SuS says limits have to be unsigned.
+diff -crB linux-4.2/include/uapi/linux/ptrace.h linux-4.2-sbox/include/uapi/linux/ptrace.h
+*** linux-4.2/include/uapi/linux/ptrace.h	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/include/uapi/linux/ptrace.h	Wed Feb 10 16:46:01 2016
+***************
+*** 49,54 ****
+--- 49,58 ----
+  #define PTRACE_GETREGSET	0x4204
+  #define PTRACE_SETREGSET	0x4205
+  
++ #define PTRACE_MEMLIMIT         0x4280
++ #define PTRACE_NO_SYSCALLS      0x4281
++ #define PTRACE_TIMELIMIT        0x4282
++ 
+  #define PTRACE_SEIZE		0x4206
+  #define PTRACE_INTERRUPT	0x4207
+  #define PTRACE_LISTEN		0x4208
+diff -crB linux-4.2/ipc/compat.c linux-4.2-sbox/ipc/compat.c
+*** linux-4.2/ipc/compat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/compat.c	Wed Feb 10 16:46:01 2016
+***************
+*** 332,337 ****
+--- 332,341 ----
+  	int version;
+  	u32 pad;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	version = call >> 16; /* hack for backward compatibility */
+  	call &= 0xffff;
+  
+diff -crB linux-4.2/ipc/mqueue.c linux-4.2-sbox/ipc/mqueue.c
+*** linux-4.2/ipc/mqueue.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/mqueue.c	Wed Feb 10 16:46:01 2016
+***************
+*** 781,786 ****
+--- 781,791 ----
+  	struct dentry *root = mnt->mnt_root;
+  	int ro;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (u_attr && copy_from_user(&attr, u_attr, sizeof(struct mq_attr)))
+  		return -EFAULT;
+  
+***************
+*** 858,863 ****
+--- 863,873 ----
+  	struct ipc_namespace *ipc_ns = current->nsproxy->ipc_ns;
+  	struct vfsmount *mnt = ipc_ns->mq_mnt;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	name = getname(u_name);
+  	if (IS_ERR(name))
+  		return PTR_ERR(name);
+***************
+*** 971,976 ****
+--- 981,991 ----
+  	int ret = 0;
+  	WAKE_Q(wake_q);
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (u_abs_timeout) {
+  		int res = prepare_timeout(u_abs_timeout, &expires, &ts);
+  		if (res)
+***************
+*** 1090,1095 ****
+--- 1105,1115 ----
+  	struct timespec ts;
+  	struct posix_msg_tree_node *new_leaf = NULL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (u_abs_timeout) {
+  		int res = prepare_timeout(u_abs_timeout, &expires, &ts);
+  		if (res)
+***************
+*** 1197,1202 ****
+--- 1217,1227 ----
+  	struct mqueue_inode_info *info;
+  	struct sk_buff *nc;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (u_notification) {
+  		if (copy_from_user(&notification, u_notification,
+  					sizeof(struct sigevent)))
+***************
+*** 1328,1333 ****
+--- 1353,1363 ----
+  	struct inode *inode;
+  	struct mqueue_inode_info *info;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (u_mqstat != NULL) {
+  		if (copy_from_user(&mqstat, u_mqstat, sizeof(struct mq_attr)))
+  			return -EFAULT;
+diff -crB linux-4.2/ipc/msg.c linux-4.2-sbox/ipc/msg.c
+*** linux-4.2/ipc/msg.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/msg.c	Wed Feb 10 16:46:01 2016
+***************
+*** 247,252 ****
+--- 247,257 ----
+  	};
+  	struct ipc_params msg_params;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ns = current->nsproxy->ipc_ns;
+  
+  	msg_params.key = key;
+***************
+*** 524,529 ****
+--- 529,539 ----
+  	int version;
+  	struct ipc_namespace *ns;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (msqid < 0 || cmd < 0)
+  		return -EINVAL;
+  
+***************
+*** 724,729 ****
+--- 734,744 ----
+  {
+  	long mtype;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (get_user(mtype, &msgp->mtype))
+  		return -EFAULT;
+  	return do_msgsnd(msqid, mtype, msgp->mtext, msgsz, msgflg);
+***************
+*** 1014,1019 ****
+--- 1029,1039 ----
+  SYSCALL_DEFINE5(msgrcv, int, msqid, struct msgbuf __user *, msgp, size_t, msgsz,
+  		long, msgtyp, int, msgflg)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return do_msgrcv(msqid, msgp, msgsz, msgtyp, msgflg, do_msg_fill);
+  }
+  
+diff -crB linux-4.2/ipc/sem.c linux-4.2-sbox/ipc/sem.c
+*** linux-4.2/ipc/sem.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/sem.c	Wed Feb 10 16:46:01 2016
+***************
+*** 589,594 ****
+--- 589,599 ----
+  	};
+  	struct ipc_params sem_params;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ns = current->nsproxy->ipc_ns;
+  
+  	if (nsems < 0 || nsems > ns->sc_semmsl)
+***************
+*** 1590,1595 ****
+--- 1595,1605 ----
+  	struct ipc_namespace *ns;
+  	void __user *p = (void __user *)arg;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (semid < 0)
+  		return -EINVAL;
+  
+***************
+*** 1803,1808 ****
+--- 1813,1823 ----
+  	struct ipc_namespace *ns;
+  	struct list_head tasks;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ns = current->nsproxy->ipc_ns;
+  
+  	if (nsops < 1 || semid < 0)
+diff -crB linux-4.2/ipc/shm.c linux-4.2-sbox/ipc/shm.c
+*** linux-4.2/ipc/shm.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/shm.c	Wed Feb 10 16:46:01 2016
+***************
+*** 625,630 ****
+--- 625,635 ----
+  	};
+  	struct ipc_params shm_params;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ns = current->nsproxy->ipc_ns;
+  
+  	shm_params.key = key;
+***************
+*** 953,958 ****
+--- 958,968 ----
+  	if (cmd < 0 || shmid < 0)
+  		return -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	version = ipc_parse_version(&cmd);
+  	ns = current->nsproxy->ipc_ns;
+  
+***************
+*** 1211,1216 ****
+--- 1221,1231 ----
+  	unsigned long ret;
+  	long err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = do_shmat(shmid, shmaddr, shmflg, &ret, SHMLBA);
+  	if (err)
+  		return err;
+***************
+*** 1234,1239 ****
+--- 1249,1259 ----
+  	struct vm_area_struct *next;
+  #endif
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (addr & ~PAGE_MASK)
+  		return retval;
+  
+diff -crB linux-4.2/ipc/syscall.c linux-4.2-sbox/ipc/syscall.c
+*** linux-4.2/ipc/syscall.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/ipc/syscall.c	Wed Feb 10 16:46:01 2016
+***************
+*** 18,23 ****
+--- 18,28 ----
+  {
+  	int version, ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	version = call >> 16; /* hack for backward compatibility */
+  	call &= 0xffff;
+  
+diff -crB linux-4.2/kernel/acct.c linux-4.2-sbox/kernel/acct.c
+*** linux-4.2/kernel/acct.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/acct.c	Wed Feb 10 16:46:01 2016
+***************
+*** 271,276 ****
+--- 271,281 ----
+  {
+  	int error = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!capable(CAP_SYS_PACCT))
+  		return -EPERM;
+  
+diff -crB linux-4.2/kernel/capability.c linux-4.2-sbox/kernel/capability.c
+*** linux-4.2/kernel/capability.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/capability.c	Wed Feb 10 16:46:01 2016
+***************
+*** 229,234 ****
+--- 229,239 ----
+  	int ret;
+  	pid_t pid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ret = cap_validate_magic(header, &tocopy);
+  	if (ret != 0)
+  		return ret;
+diff -crB linux-4.2/kernel/compat.c linux-4.2-sbox/kernel/compat.c
+*** linux-4.2/kernel/compat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/compat.c	Wed Feb 10 16:46:01 2016
+***************
+*** 112,117 ****
+--- 112,122 ----
+  	struct timespec	new_ts;
+  	struct timezone new_tz;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (tv) {
+  		if (compat_get_timeval(&user_tv, tv))
+  			return -EFAULT;
+***************
+*** 313,318 ****
+--- 318,328 ----
+  	struct itimerval kit;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	error = do_getitimer(which, &kit);
+  	if (!error && put_compat_itimerval(it, &kit))
+  		error = -EFAULT;
+***************
+*** 326,331 ****
+--- 336,346 ----
+  	struct itimerval kin, kout;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (in) {
+  		if (get_compat_itimerval(&kin, in))
+  			return -EFAULT;
+***************
+*** 347,352 ****
+--- 362,372 ----
+  
+  COMPAT_SYSCALL_DEFINE1(times, struct compat_tms __user *, tbuf)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (tbuf) {
+  		struct tms tms;
+  		struct compat_tms tmp;
+***************
+*** 405,410 ****
+--- 425,434 ----
+  	old_sigset_t old_set, new_set;
+  	sigset_t new_blocked;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	old_set = current->blocked.sig[0];
+  
+  	if (nset) {
+***************
+*** 446,451 ****
+--- 470,480 ----
+  {
+  	struct rlimit r;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!access_ok(VERIFY_READ, rlim, sizeof(*rlim)) ||
+  	    __get_user(r.rlim_cur, &rlim->rlim_cur) ||
+  	    __get_user(r.rlim_max, &rlim->rlim_max))
+***************
+*** 620,625 ****
+--- 649,659 ----
+  	cpumask_var_t new_mask;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
+  		return -ENOMEM;
+  
+***************
+*** 685,690 ****
+--- 719,729 ----
+  {
+  	struct sigevent __user *event = NULL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (timer_event_spec) {
+  		struct sigevent kevent;
+  
+***************
+*** 705,710 ****
+--- 744,754 ----
+  	mm_segment_t oldfs;
+  	struct itimerspec newts, oldts;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!new)
+  		return -EINVAL;
+  	if (get_compat_itimerspec(&newts, new))
+***************
+*** 744,749 ****
+--- 788,798 ----
+  	mm_segment_t oldfs;
+  	struct timespec ts;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (compat_get_timespec(&ts, tp))
+  		return -EFAULT;
+  	oldfs = get_fs();
+***************
+*** 778,783 ****
+--- 827,837 ----
+  	mm_segment_t oldfs;
+  	int err, ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = compat_get_timex(&txc, utp);
+  	if (err)
+  		return err;
+***************
+*** 1050,1055 ****
+--- 1104,1114 ----
+  	struct timespec tv;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (get_user(tv.tv_sec, tptr))
+  		return -EFAULT;
+  
+***************
+*** 1070,1075 ****
+--- 1129,1139 ----
+  	struct timex txc;
+  	int err, ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = compat_get_timex(&txc, utp);
+  	if (err)
+  		return err;
+diff -crB linux-4.2/kernel/events/core.c linux-4.2-sbox/kernel/events/core.c
+*** linux-4.2/kernel/events/core.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/events/core.c	Wed Feb 10 16:46:01 2016
+***************
+*** 7943,7948 ****
+--- 7943,7953 ----
+  	int f_flags = O_RDWR;
+  	int cgroup_fd = -1;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* for future expandability... */
+  	if (flags & ~PERF_FLAG_ALL)
+  		return -EINVAL;
+diff -crB linux-4.2/kernel/exec_domain.c linux-4.2-sbox/kernel/exec_domain.c
+*** linux-4.2/kernel/exec_domain.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/exec_domain.c	Wed Feb 10 16:46:01 2016
+***************
+*** 51,56 ****
+--- 51,59 ----
+  {
+  	unsigned int old = current->personality;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return old;
++ 
+  	if (personality != 0xffffffff)
+  		set_personality(personality);
+  
+diff -crB linux-4.2/kernel/exit.c linux-4.2-sbox/kernel/exit.c
+*** linux-4.2/kernel/exit.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/exit.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1066,1073 ****
+  		? getrusage(p, RUSAGE_BOTH, wo->wo_rusage) : 0;
+  	status = (p->signal->flags & SIGNAL_GROUP_EXIT)
+  		? p->signal->group_exit_code : p->exit_code;
+! 	if (!retval && wo->wo_stat)
+! 		retval = put_user(status, wo->wo_stat);
+  
+  	infop = wo->wo_info;
+  	if (!retval && infop)
+--- 1066,1081 ----
+  		? getrusage(p, RUSAGE_BOTH, wo->wo_rusage) : 0;
+  	status = (p->signal->flags & SIGNAL_GROUP_EXIT)
+  		? p->signal->group_exit_code : p->exit_code;
+! 	if (!retval && wo->wo_stat) {
+!                 int newstatus = status;
+!                 if (SBOX_IS_MEMLIMIT_ERR(p))
+!                         newstatus |= 0x10000;
+!                 if (SBOX_IS_SECURITY_ERR(p))
+!                         newstatus |= 0x20000;
+!                 if (SBOX_IS_TL_ERR(p))
+!                         newstatus |= 0x40000;
+! 		retval = put_user(newstatus, wo->wo_stat);
+!         }
+  
+  	infop = wo->wo_info;
+  	if (!retval && infop)
+***************
+*** 1199,1206 ****
+  
+  	retval = wo->wo_rusage
+  		? getrusage(p, RUSAGE_BOTH, wo->wo_rusage) : 0;
+! 	if (!retval && wo->wo_stat)
+! 		retval = put_user((exit_code << 8) | 0x7f, wo->wo_stat);
+  
+  	infop = wo->wo_info;
+  	if (!retval && infop)
+--- 1207,1222 ----
+  
+  	retval = wo->wo_rusage
+  		? getrusage(p, RUSAGE_BOTH, wo->wo_rusage) : 0;
+! 	if (!retval && wo->wo_stat) {
+!                 int newstatus = (exit_code << 8) | 0x7f;
+!                 if (SBOX_IS_MEMLIMIT_ERR(p))
+!                         newstatus |= 0x10000;
+!                 if (SBOX_IS_SECURITY_ERR(p))
+!                         newstatus |= 0x20000;
+!                 if (SBOX_IS_TL_ERR(p))
+!                         newstatus |= 0x40000;
+! 		retval = put_user(newstatus, wo->wo_stat);
+!         }
+  
+  	infop = wo->wo_info;
+  	if (!retval && infop)
+diff -crB linux-4.2/kernel/fork.c linux-4.2-sbox/kernel/fork.c
+*** linux-4.2/kernel/fork.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/fork.c	Wed Feb 10 16:54:18 2016
+***************
+*** 1095,1100 ****
+--- 1095,1101 ----
+  static void posix_cpu_timers_init_group(struct signal_struct *sig)
+  {
+  	unsigned long cpu_limit;
++ 	unsigned long mcpu_limit;
+  
+  	cpu_limit = READ_ONCE(sig->rlim[RLIMIT_CPU].rlim_cur);
+  	if (cpu_limit != RLIM_INFINITY) {
+***************
+*** 1102,1107 ****
+--- 1103,1114 ----
+  		sig->cputimer.running = 1;
+  	}
+  
++     mcpu_limit = READ_ONCE(sig->rlim[RLIMIT_MCPU].rlim_cur);
++     if (mcpu_limit != RLIM_INFINITY) {
++         sig->cputime_expires.prof_exp = msecs_to_cputime(mcpu_limit);
++         sig->cputimer.running = 1;
++     }
++ 
+  	/* The timer lists. */
+  	INIT_LIST_HEAD(&sig->cpu_timers[0]);
+  	INIT_LIST_HEAD(&sig->cpu_timers[1]);
+***************
+*** 1687,1692 ****
+--- 1694,1704 ----
+  	int trace = 0;
+  	long nr;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/*
+  	 * Determine whether and which event to report to ptracer.  When
+  	 * called from kernel_thread or CLONE_UNTRACED is explicitly
+***************
+*** 1940,1945 ****
+--- 1952,1962 ----
+  	int do_sysvsem = 0;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/*
+  	 * If unsharing a user namespace must also unshare the thread.
+  	 */
+diff -crB linux-4.2/kernel/groups.c linux-4.2-sbox/kernel/groups.c
+*** linux-4.2/kernel/groups.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/groups.c	Wed Feb 10 16:46:01 2016
+***************
+*** 229,234 ****
+--- 229,239 ----
+  	struct group_info *group_info;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!may_setgroups())
+  		return -EPERM;
+  	if ((unsigned)gidsetsize > NGROUPS_MAX)
+diff -crB linux-4.2/kernel/kcmp.c linux-4.2-sbox/kernel/kcmp.c
+*** linux-4.2/kernel/kcmp.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/kcmp.c	Wed Feb 10 16:46:01 2016
+***************
+*** 100,105 ****
+--- 100,110 ----
+  	struct task_struct *task1, *task2;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	rcu_read_lock();
+  
+  	/*
+diff -crB linux-4.2/kernel/kexec.c linux-4.2-sbox/kernel/kexec.c
+*** linux-4.2/kernel/kexec.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/kexec.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1253,1258 ****
+--- 1253,1263 ----
+  	struct kimage **dest_image, *image;
+  	int result;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* We only trust the superuser with rebooting the system. */
+  	if (!capable(CAP_SYS_BOOT) || kexec_load_disabled)
+  		return -EPERM;
+***************
+*** 1362,1367 ****
+--- 1367,1377 ----
+  	struct kexec_segment out, __user *ksegments;
+  	unsigned long i, result;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* Don't allow clients that don't understand the native
+  	 * architecture to do anything.
+  	 */
+diff -crB linux-4.2/kernel/module.c linux-4.2-sbox/kernel/module.c
+*** linux-4.2/kernel/module.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/module.c	Wed Feb 10 16:46:01 2016
+***************
+*** 954,959 ****
+--- 954,964 ----
+  	char name[MODULE_NAME_LEN];
+  	int ret, forced = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!capable(CAP_SYS_MODULE) || modules_disabled)
+  		return -EPERM;
+  
+***************
+*** 3582,3587 ****
+--- 3587,3597 ----
+  	int err;
+  	struct load_info info = { };
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = may_init_module();
+  	if (err)
+  		return err;
+***************
+*** 3601,3606 ****
+--- 3611,3621 ----
+  	int err;
+  	struct load_info info = { };
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = may_init_module();
+  	if (err)
+  		return err;
+diff -crB linux-4.2/kernel/nsproxy.c linux-4.2-sbox/kernel/nsproxy.c
+*** linux-4.2/kernel/nsproxy.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/nsproxy.c	Wed Feb 10 16:46:01 2016
+***************
+*** 226,231 ****
+--- 226,236 ----
+  	struct ns_common *ns;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	file = proc_ns_fget(fd);
+  	if (IS_ERR(file))
+  		return PTR_ERR(file);
+diff -crB linux-4.2/kernel/printk/printk.c linux-4.2-sbox/kernel/printk/printk.c
+*** linux-4.2/kernel/printk/printk.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/printk/printk.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1418,1423 ****
+--- 1418,1426 ----
+  
+  SYSCALL_DEFINE3(syslog, int, type, char __user *, buf, int, len)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
+  	return do_syslog(type, buf, len, SYSLOG_FROM_READER);
+  }
+  
+diff -crB linux-4.2/kernel/ptrace.c linux-4.2-sbox/kernel/ptrace.c
+*** linux-4.2/kernel/ptrace.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/ptrace.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1035,1040 ****
+--- 1035,1058 ----
+  	struct task_struct *child;
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         if (request == PTRACE_MEMLIMIT) {
++                 current->sbox_flags |= SBOX_MEMLIMITON;
++                 return 0;
++         }
++         if (request == PTRACE_NO_SYSCALLS) {
++                 current->sbox_flags |= SBOX_NO_SYSCALLS;
++                 return 0;
++         }
++         if (request == PTRACE_TIMELIMIT) {
++                 current->sbox_flags |= SBOX_TLON;
++                 return 0;
++         }
++ 
+  	if (request == PTRACE_TRACEME) {
+  		ret = ptrace_traceme();
+  		if (!ret)
+***************
+*** 1181,1186 ****
+--- 1199,1222 ----
+  	struct task_struct *child;
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         if (request == PTRACE_MEMLIMIT) {
++                 current->sbox_flags |= SBOX_MEMLIMITON;
++                 return 0;
++         }
++         if (request == PTRACE_NO_SYSCALLS) {
++                 current->sbox_flags |= SBOX_NO_SYSCALLS;
++                 return 0;
++         }
++         if (request == PTRACE_TIMELIMIT) {
++                 current->sbox_flags |= SBOX_TLON;
++                 return 0;
++         }
++ 
+  	if (request == PTRACE_TRACEME) {
+  		ret = ptrace_traceme();
+  		goto out;
+diff -crB linux-4.2/kernel/reboot.c linux-4.2-sbox/kernel/reboot.c
+*** linux-4.2/kernel/reboot.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/reboot.c	Wed Feb 10 16:46:01 2016
+***************
+*** 280,289 ****
+  SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+  		void __user *, arg)
+  {
+! 	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+  	char buffer[256];
+  	int ret = 0;
+  
+  	/* We only trust the superuser with rebooting the system. */
+  	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+  		return -EPERM;
+--- 280,295 ----
+  SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+  		void __user *, arg)
+  {
+!         struct pid_namespace *pid_ns = NULL;
+  	char buffer[256];
+  	int ret = 0;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++ 	pid_ns = task_active_pid_ns(current);
+  	/* We only trust the superuser with rebooting the system. */
+  	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+  		return -EPERM;
+diff -crB linux-4.2/kernel/sched/core.c linux-4.2-sbox/kernel/sched/core.c
+*** linux-4.2/kernel/sched/core.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/sched/core.c	Wed Feb 10 16:46:01 2016
+***************
+*** 3403,3408 ****
+--- 3403,3411 ----
+  {
+  	long nice, retval;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/*
+  	 * Setpriority might change our priority at the same moment.
+  	 * We don't have to worry. Conceptually one call occurs first
+***************
+*** 4065,4070 ****
+--- 4068,4078 ----
+  SYSCALL_DEFINE3(sched_setscheduler, pid_t, pid, int, policy,
+  		struct sched_param __user *, param)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* negative values for policy are not valid */
+  	if (policy < 0)
+  		return -EINVAL;
+***************
+*** 4081,4086 ****
+--- 4089,4099 ----
+   */
+  SYSCALL_DEFINE2(sched_setparam, pid_t, pid, struct sched_param __user *, param)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return do_sched_setscheduler(pid, SETPARAM_POLICY, param);
+  }
+  
+***************
+*** 4097,4102 ****
+--- 4110,4120 ----
+  	struct task_struct *p;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!uattr || pid < 0 || flags)
+  		return -EINVAL;
+  
+***************
+*** 4388,4393 ****
+--- 4406,4416 ----
+  	cpumask_var_t new_mask;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
+  		return -ENOMEM;
+  
+diff -crB linux-4.2/kernel/signal.c linux-4.2-sbox/kernel/signal.c
+*** linux-4.2/kernel/signal.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/signal.c	Wed Feb 10 16:46:01 2016
+***************
+*** 2587,2592 ****
+--- 2587,2596 ----
+  	sigset_t old_set, new_set;
+  	int error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 nset = NULL;
++         }
++ 
+  	/* XXX: Don't preclude handling different sized sigset_t's.  */
+  	if (sigsetsize != sizeof(sigset_t))
+  		return -EINVAL;
+***************
+*** 2618,2623 ****
+--- 2622,2631 ----
+  #ifdef __BIG_ENDIAN
+  	sigset_t old_set = current->blocked;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 nset = NULL;
++         }
++ 
+  	/* XXX: Don't preclude handling different sized sigset_t's.  */
+  	if (sigsetsize != sizeof(sigset_t))
+  		return -EINVAL;
+***************
+*** 2897,2902 ****
+--- 2905,2918 ----
+  {
+  	struct siginfo info;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 if (!pid) pid = current->pid;
++                 if (pid != current->pid) {
++                         SBOX_SET_SECURITY_ERR();
++                         return -EPERM;
++                 }
++         }
++ 
+  	info.si_signo = sig;
+  	info.si_errno = 0;
+  	info.si_code = SI_USER;
+***************
+*** 2965,2970 ****
+--- 2981,2991 ----
+  	if (pid <= 0 || tgid <= 0)
+  		return -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED() && current->pid != tgid) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return do_tkill(tgid, pid, sig);
+  }
+  
+***************
+*** 2981,2986 ****
+--- 3002,3012 ----
+  	if (pid <= 0)
+  		return -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return do_tkill(0, pid, sig);
+  }
+  
+***************
+*** 3203,3208 ****
+--- 3229,3238 ----
+  }
+  SYSCALL_DEFINE2(sigaltstack,const stack_t __user *,uss, stack_t __user *,uoss)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	return do_sigaltstack(uss, uoss, current_user_stack_pointer());
+  }
+  
+***************
+*** 3230,3235 ****
+--- 3260,3269 ----
+  	int ret;
+  	mm_segment_t seg;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	if (uss_ptr) {
+  		compat_stack_t uss32;
+  
+***************
+*** 3302,3307 ****
+--- 3336,3345 ----
+  	old_sigset_t old_set, new_set;
+  	sigset_t new_blocked;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 nset = NULL;
++         }
++ 
+  	old_set = current->blocked.sig[0];
+  
+  	if (nset) {
+***************
+*** 3513,3518 ****
+--- 3551,3560 ----
+  	int old = current->blocked.sig[0];
+  	sigset_t newset;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return old;
++         }
++ 
+  	siginitset(&newset, newmask);
+  	set_current_blocked(&newset);
+  
+diff -crB linux-4.2/kernel/sys.c linux-4.2-sbox/kernel/sys.c
+*** linux-4.2/kernel/sys.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/sys.c	Wed Feb 10 16:46:01 2016
+***************
+*** 181,186 ****
+--- 181,191 ----
+  	struct pid *pgrp;
+  	kuid_t uid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (which > PRIO_USER || which < PRIO_PROCESS)
+  		goto out;
+  
+***************
+*** 334,339 ****
+--- 339,349 ----
+  	int retval;
+  	kgid_t krgid, kegid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	krgid = make_kgid(ns, rgid);
+  	kegid = make_kgid(ns, egid);
+  
+***************
+*** 391,396 ****
+--- 401,411 ----
+  	int retval;
+  	kgid_t kgid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kgid = make_kgid(ns, gid);
+  	if (!gid_valid(kgid))
+  		return -EINVAL;
+***************
+*** 467,472 ****
+--- 482,492 ----
+  	int retval;
+  	kuid_t kruid, keuid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kruid = make_kuid(ns, ruid);
+  	keuid = make_kuid(ns, euid);
+  
+***************
+*** 538,543 ****
+--- 558,568 ----
+  	int retval;
+  	kuid_t kuid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kuid = make_kuid(ns, uid);
+  	if (!uid_valid(kuid))
+  		return -EINVAL;
+***************
+*** 585,590 ****
+--- 610,620 ----
+  	int retval;
+  	kuid_t kruid, keuid, ksuid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	kruid = make_kuid(ns, ruid);
+  	keuid = make_kuid(ns, euid);
+  	ksuid = make_kuid(ns, suid);
+***************
+*** 672,677 ****
+--- 702,712 ----
+  	int retval;
+  	kgid_t krgid, kegid, ksgid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	krgid = make_kgid(ns, rgid);
+  	kegid = make_kgid(ns, egid);
+  	ksgid = make_kgid(ns, sgid);
+***************
+*** 750,755 ****
+--- 785,795 ----
+  	uid_t old_fsuid;
+  	kuid_t kuid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	old = current_cred();
+  	old_fsuid = from_kuid_munged(old->user_ns, old->fsuid);
+  
+***************
+*** 789,794 ****
+--- 829,839 ----
+  	gid_t old_fsgid;
+  	kgid_t kgid;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	old = current_cred();
+  	old_fsgid = from_kgid_munged(old->user_ns, old->fsgid);
+  
+***************
+*** 923,928 ****
+--- 968,978 ----
+  	struct pid *pgrp;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!pid)
+  		pid = task_pid_vnr(group_leader);
+  	if (!pgid)
+***************
+*** 1070,1075 ****
+--- 1120,1130 ----
+  	pid_t session = pid_vnr(sid);
+  	int err = -EPERM;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	write_lock_irq(&tasklist_lock);
+  	/* Fail if I am already a session leader */
+  	if (group_leader->signal->leader)
+***************
+*** 1217,1222 ****
+--- 1272,1282 ----
+  	int errno;
+  	char tmp[__NEW_UTS_LEN];
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!ns_capable(current->nsproxy->uts_ns->user_ns, CAP_SYS_ADMIN))
+  		return -EPERM;
+  
+***************
+*** 1268,1273 ****
+--- 1328,1338 ----
+  	int errno;
+  	char tmp[__NEW_UTS_LEN];
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!ns_capable(current->nsproxy->uts_ns->user_ns, CAP_SYS_ADMIN))
+  		return -EPERM;
+  	if (len < 0 || len > __NEW_UTS_LEN)
+***************
+*** 1400,1405 ****
+--- 1465,1479 ----
+  			 */
+  			new_rlim->rlim_cur = 1;
+  		}
++         if (resource == RLIMIT_MCPU && new_rlim->rlim_cur == 0) {
++ 			/*
++ 			 * The caller is asking for an immediate RLIMIT_MCPU
++ 			 * expiry.  But we use the zero value to mean "it was
++ 			 * never set".  So let's cheat and make it one second
++ 			 * instead
++ 			 */
++             new_rlim->rlim_cur = 1;
++         }
+  	}
+  	if (!retval) {
+  		if (old_rlim)
+***************
+*** 1454,1459 ****
+--- 1528,1542 ----
+  	struct task_struct *tsk;
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 if (!pid) pid = current->pid;
++                 if (pid != current->pid) {
++                         SBOX_SET_SECURITY_ERR();
++                         return -EPERM;
++                 }
++                 new_rlim = NULL;
++         }
++ 
+  	if (new_rlim) {
+  		if (copy_from_user(&new64, new_rlim, sizeof(new64)))
+  			return -EFAULT;
+***************
+*** 1491,1496 ****
+--- 1574,1583 ----
+  {
+  	struct rlimit new_rlim;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	if (copy_from_user(&new_rlim, rlim, sizeof(*rlim)))
+  		return -EFAULT;
+  	return do_prlimit(current, resource, &new_rlim, NULL);
+***************
+*** 1645,1650 ****
+--- 1732,1741 ----
+  
+  SYSCALL_DEFINE1(umask, int, mask)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 return current->fs->umask;
++         }
++ 
+  	mask = xchg(&current->fs->umask, mask & S_IRWXUGO);
+  	return mask;
+  }
+***************
+*** 2080,2085 ****
+--- 2171,2181 ----
+  	unsigned char comm[sizeof(me->comm)];
+  	long error;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	error = security_task_prctl(option, arg2, arg3, arg4, arg5);
+  	if (error != -ENOSYS)
+  		return error;
+***************
+*** 2357,2362 ****
+--- 2453,2462 ----
+  {
+  	struct sysinfo val;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	do_sysinfo(&val);
+  
+  	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
+***************
+*** 2387,2392 ****
+--- 2487,2496 ----
+  {
+  	struct sysinfo s;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	do_sysinfo(&s);
+  
+  	/* Check to see if any memory value is too large for 32-bit and scale
+diff -crB linux-4.2/kernel/sysctl_binary.c linux-4.2-sbox/kernel/sysctl_binary.c
+*** linux-4.2/kernel/sysctl_binary.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/sysctl_binary.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1423,1428 ****
+--- 1423,1433 ----
+  	size_t oldlen = 0;
+  	ssize_t result;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (copy_from_user(&tmp, args, sizeof(tmp)))
+  		return -EFAULT;
+  
+***************
+*** 1466,1471 ****
+--- 1471,1481 ----
+  	size_t oldlen = 0;
+  	ssize_t result;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (copy_from_user(&tmp, args, sizeof(tmp)))
+  		return -EFAULT;
+  
+diff -crB linux-4.2/kernel/time/posix-cpu-timers.c linux-4.2-sbox/kernel/time/posix-cpu-timers.c
+*** linux-4.2/kernel/time/posix-cpu-timers.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/time/posix-cpu-timers.c	Wed Feb 10 16:46:01 2016
+***************
+*** 28,33 ****
+--- 28,43 ----
+  	spin_unlock_irq(&task->sighand->siglock);
+  }
+  
++ void update_rlimit_mcpu(struct task_struct *task, unsigned long rlim_new)
++ {
++ 	cputime_t cputime = msecs_to_cputime(rlim_new);
++ 
++ 	spin_lock_irq(&task->sighand->siglock);
++ 	set_process_cpu_timer(task, CPUCLOCK_PROF, &cputime, NULL);
++ 	spin_unlock_irq(&task->sighand->siglock);
++ }
++ 
++ 
+  static int check_clock(const clockid_t which_clock)
+  {
+  	int error = 0;
+***************
+*** 887,892 ****
+--- 897,904 ----
+  			 * At the hard limit, we just die.
+  			 * No need to calculate anything else now.
+  			 */
++                         if ((tsk->sbox_flags & SBOX_TLON))
++                                 tsk->sbox_flags |= SBOX_WAS_TL;
+  			__group_send_sig_info(SIGKILL, SEND_SIG_PRIV, tsk);
+  			return;
+  		}
+***************
+*** 980,985 ****
+--- 992,1030 ----
+  			 SIGPROF);
+  	check_cpu_itimer(tsk, &sig->it[CPUCLOCK_VIRT], &virt_expires, utime,
+  			 SIGVTALRM);
++ 
++ 	soft = READ_ONCE(sig->rlim[RLIMIT_MCPU].rlim_cur);
++ 	if (soft != RLIM_INFINITY) {
++ 		unsigned long psecs = cputime_to_secs(ptime);
++ 		unsigned long hard =
++ 			READ_ONCE(sig->rlim[RLIMIT_MCPU].rlim_max);
++ 		cputime_t x;
++ 		if (psecs >= hard) {
++ 			/*
++ 			 * At the hard limit, we just die.
++ 			 * No need to calculate anything else now.
++ 			 */
++                         if ((tsk->sbox_flags & SBOX_TLON))
++                                 tsk->sbox_flags |= SBOX_WAS_TL;
++ 			__group_send_sig_info(SIGKILL, SEND_SIG_PRIV, tsk);
++ 			return;
++ 		}
++ 		if (psecs >= soft) {
++ 			/*
++ 			 * At the soft limit, send a SIGXCPU every second.
++ 			 */
++ 			__group_send_sig_info(SIGXCPU, SEND_SIG_PRIV, tsk);
++ 			if (soft < hard) {
++ 				soft++;
++ 				sig->rlim[RLIMIT_MCPU].rlim_cur = soft;
++ 			}
++ 		}
++ 		x = msecs_to_cputime(soft);
++ 		if (!prof_expires || x < prof_expires) {
++ 			prof_expires = x;
++ 		}
++ 	}
++ 
+  	soft = READ_ONCE(sig->rlim[RLIMIT_CPU].rlim_cur);
+  	if (soft != RLIM_INFINITY) {
+  		unsigned long psecs = cputime_to_secs(ptime);
+***************
+*** 991,996 ****
+--- 1036,1043 ----
+  			 * At the hard limit, we just die.
+  			 * No need to calculate anything else now.
+  			 */
++                         if ((tsk->sbox_flags & SBOX_TLON))
++                                 tsk->sbox_flags |= SBOX_WAS_TL;
+  			__group_send_sig_info(SIGKILL, SEND_SIG_PRIV, tsk);
+  			return;
+  		}
+diff -crB linux-4.2/kernel/time/time.c linux-4.2-sbox/kernel/time/time.c
+*** linux-4.2/kernel/time/time.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/time/time.c	Wed Feb 10 16:46:01 2016
+***************
+*** 84,89 ****
+--- 84,94 ----
+  	struct timespec tv;
+  	int err;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (get_user(tv.tv_sec, tptr))
+  		return -EFAULT;
+  
+***************
+*** 197,202 ****
+--- 202,212 ----
+  	struct timespec	new_ts;
+  	struct timezone new_tz;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (tv) {
+  		if (copy_from_user(&user_tv, tv, sizeof(*tv)))
+  			return -EFAULT;
+***************
+*** 220,225 ****
+--- 230,240 ----
+  	struct timex txc;		/* Local copy of parameter */
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* Copy the user data space into the kernel copy
+  	 * structure. But bear in mind that the structures
+  	 * may change
+diff -crB linux-4.2/kernel/uid16.c linux-4.2-sbox/kernel/uid16.c
+*** linux-4.2/kernel/uid16.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/kernel/uid16.c	Wed Feb 10 16:46:01 2016
+***************
+*** 176,181 ****
+--- 176,186 ----
+  	struct group_info *group_info;
+  	int retval;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!may_setgroups())
+  		return -EPERM;
+  	if ((unsigned)gidsetsize > NGROUPS_MAX)
+diff -crB linux-4.2/mm/madvise.c linux-4.2-sbox/mm/madvise.c
+*** linux-4.2/mm/madvise.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/madvise.c	Wed Feb 10 16:46:01 2016
+***************
+*** 466,471 ****
+--- 466,474 ----
+  	size_t len;
+  	struct blk_plug plug;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  #ifdef CONFIG_MEMORY_FAILURE
+  	if (behavior == MADV_HWPOISON || behavior == MADV_SOFT_OFFLINE)
+  		return madvise_hwpoison(behavior, start, start+len_in);
+diff -crB linux-4.2/mm/mempolicy.c linux-4.2-sbox/mm/mempolicy.c
+*** linux-4.2/mm/mempolicy.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/mempolicy.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1306,1311 ****
+--- 1306,1314 ----
+  	int err;
+  	unsigned short mode_flags;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	mode_flags = mode & MPOL_MODE_FLAGS;
+  	mode &= ~MPOL_MODE_FLAGS;
+  	if (mode >= MPOL_MAX)
+***************
+*** 1327,1332 ****
+--- 1330,1338 ----
+  	nodemask_t nodes;
+  	unsigned short flags;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	flags = mode & MPOL_MODE_FLAGS;
+  	mode &= ~MPOL_MODE_FLAGS;
+  	if ((unsigned int)mode >= MPOL_MAX)
+***************
+*** 1352,1357 ****
+--- 1358,1366 ----
+  	nodemask_t *new;
+  	NODEMASK_SCRATCH(scratch);
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (!scratch)
+  		return -ENOMEM;
+  
+***************
+*** 1443,1448 ****
+--- 1452,1460 ----
+  	int uninitialized_var(pval);
+  	nodemask_t nodes;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (nmask != NULL && maxnode < MAX_NUMNODES)
+  		return -EINVAL;
+  
+***************
+*** 1472,1477 ****
+--- 1484,1492 ----
+  	unsigned long nr_bits, alloc_size;
+  	DECLARE_BITMAP(bm, MAX_NUMNODES);
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	nr_bits = min_t(unsigned long, maxnode-1, MAX_NUMNODES);
+  	alloc_size = ALIGN(nr_bits, BITS_PER_LONG) / 8;
+  
+***************
+*** 1500,1505 ****
+--- 1515,1523 ----
+  	unsigned long nr_bits, alloc_size;
+  	DECLARE_BITMAP(bm, MAX_NUMNODES);
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	nr_bits = min_t(unsigned long, maxnode-1, MAX_NUMNODES);
+  	alloc_size = ALIGN(nr_bits, BITS_PER_LONG) / 8;
+  
+***************
+*** 1524,1529 ****
+--- 1542,1550 ----
+  	unsigned long nr_bits, alloc_size;
+  	nodemask_t bm;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	nr_bits = min_t(unsigned long, maxnode-1, MAX_NUMNODES);
+  	alloc_size = ALIGN(nr_bits, BITS_PER_LONG) / 8;
+  
+diff -crB linux-4.2/mm/migrate.c linux-4.2-sbox/mm/migrate.c
+*** linux-4.2/mm/migrate.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/migrate.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1467,1472 ****
+--- 1467,1475 ----
+  	int err;
+  	nodemask_t task_nodes;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check flags */
+  	if (flags & ~(MPOL_MF_MOVE|MPOL_MF_MOVE_ALL))
+  		return -EINVAL;
+diff -crB linux-4.2/mm/mincore.c linux-4.2-sbox/mm/mincore.c
+*** linux-4.2/mm/mincore.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/mincore.c	Wed Feb 10 16:46:01 2016
+***************
+*** 224,229 ****
+--- 224,232 ----
+  	unsigned long pages;
+  	unsigned char *tmp;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	/* Check the start address: needs to be page-aligned.. */
+   	if (start & ~PAGE_CACHE_MASK)
+  		return -EINVAL;
+diff -crB linux-4.2/mm/mlock.c linux-4.2-sbox/mm/mlock.c
+*** linux-4.2/mm/mlock.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/mlock.c	Wed Feb 10 16:46:01 2016
+***************
+*** 610,615 ****
+--- 610,618 ----
+  	unsigned long lock_limit;
+  	int error = -ENOMEM;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (!can_do_mlock())
+  		return -EPERM;
+  
+***************
+*** 644,649 ****
+--- 647,655 ----
+  {
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	len = PAGE_ALIGN(len + (start & ~PAGE_MASK));
+  	start &= PAGE_MASK;
+  
+***************
+*** 685,690 ****
+--- 691,699 ----
+  	unsigned long lock_limit;
+  	int ret = -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (!flags || (flags & ~(MCL_CURRENT | MCL_FUTURE)))
+  		goto out;
+  
+***************
+*** 715,720 ****
+--- 724,732 ----
+  {
+  	int ret;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	down_write(&current->mm->mmap_sem);
+  	ret = do_mlockall(0);
+  	up_write(&current->mm->mmap_sem);
+diff -crB linux-4.2/mm/mmap.c linux-4.2-sbox/mm/mmap.c
+*** linux-4.2/mm/mmap.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/mmap.c	Wed Feb 10 16:46:01 2016
+***************
+*** 228,233 ****
+--- 228,236 ----
+  error:
+  	vm_unacct_memory(pages);
+  
++         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
++                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
++         }
+  	return -ENOMEM;
+  }
+  
+***************
+*** 563,570 ****
+  
+  		if (vma_tmp->vm_end > addr) {
+  			/* Fail if an existing vma overlaps the area */
+! 			if (vma_tmp->vm_start < end)
+  				return -ENOMEM;
+  			__rb_link = &__rb_parent->rb_left;
+  		} else {
+  			rb_prev = __rb_parent;
+--- 566,574 ----
+  
+  		if (vma_tmp->vm_end > addr) {
+  			/* Fail if an existing vma overlaps the area */
+! 			if (vma_tmp->vm_start < end) {
+  				return -ENOMEM;
++                         }
+  			__rb_link = &__rb_parent->rb_left;
+  		} else {
+  			rb_prev = __rb_parent;
+***************
+*** 774,781 ****
+  
+  			importer->anon_vma = exporter->anon_vma;
+  			error = anon_vma_clone(importer, exporter);
+! 			if (error)
+  				return error;
+  		}
+  	}
+  
+--- 778,789 ----
+  
+  			importer->anon_vma = exporter->anon_vma;
+  			error = anon_vma_clone(importer, exporter);
+! 			if (error) {
+!                                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                                 }
+  				return error;
++                         }
+  		}
+  	}
+  
+***************
+*** 1281,1291 ****
+  
+  	/* offset overflow? */
+  	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
+! 		return -EOVERFLOW;
+  
+  	/* Too many mappings? */
+! 	if (mm->map_count > sysctl_max_map_count)
+  		return -ENOMEM;
+  
+  	/* Obtain the address to map to. we verify (or select) it and ensure
+  	 * that it represents a valid section of the address space.
+--- 1289,1303 ----
+  
+  	/* offset overflow? */
+  	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
+!                return -EOVERFLOW;
+  
+  	/* Too many mappings? */
+! 	if (mm->map_count > sysctl_max_map_count) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/* Obtain the address to map to. we verify (or select) it and ensure
+  	 * that it represents a valid section of the address space.
+***************
+*** 1540,1560 ****
+  		 * MAP_FIXED may remove pages of mappings that intersects with
+  		 * requested mapping. Account for the pages it would unmap.
+  		 */
+! 		if (!(vm_flags & MAP_FIXED))
+  			return -ENOMEM;
+  
+  		nr_pages = count_vma_pages_range(mm, addr, addr + len);
+  
+! 		if (!may_expand_vm(mm, (len >> PAGE_SHIFT) - nr_pages))
+  			return -ENOMEM;
+  	}
+  
+  	/* Clear old maps */
+  	error = -ENOMEM;
+  	while (find_vma_links(mm, addr, addr + len, &prev, &rb_link,
+  			      &rb_parent)) {
+! 		if (do_munmap(mm, addr, len))
+  			return -ENOMEM;
+  	}
+  
+  	/*
+--- 1552,1584 ----
+  		 * MAP_FIXED may remove pages of mappings that intersects with
+  		 * requested mapping. Account for the pages it would unmap.
+  		 */
+! 		if (!(vm_flags & MAP_FIXED)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  
+  		nr_pages = count_vma_pages_range(mm, addr, addr + len);
+  
+! 		if (!may_expand_vm(mm, (len >> PAGE_SHIFT) - nr_pages)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  	}
+  
+  	/* Clear old maps */
+  	error = -ENOMEM;
+  	while (find_vma_links(mm, addr, addr + len, &prev, &rb_link,
+  			      &rb_parent)) {
+! 		if (do_munmap(mm, addr, len)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  	}
+  
+  	/*
+***************
+*** 1562,1569 ****
+  	 */
+  	if (accountable_mapping(file, vm_flags)) {
+  		charged = len >> PAGE_SHIFT;
+! 		if (security_vm_enough_memory_mm(mm, charged))
+  			return -ENOMEM;
+  		vm_flags |= VM_ACCOUNT;
+  	}
+  
+--- 1586,1597 ----
+  	 */
+  	if (accountable_mapping(file, vm_flags)) {
+  		charged = len >> PAGE_SHIFT;
+! 		if (security_vm_enough_memory_mm(mm, charged)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  		vm_flags |= VM_ACCOUNT;
+  	}
+  
+***************
+*** 1582,1587 ****
+--- 1610,1619 ----
+  	 */
+  	vma = kmem_cache_zalloc(vm_area_cachep, GFP_KERNEL);
+  	if (!vma) {
++                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
++                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
++                 }
++ 
+  		error = -ENOMEM;
+  		goto unacct_error;
+  	}
+***************
+*** 1706,1721 ****
+  
+  	/* Adjust search length to account for worst case alignment overhead */
+  	length = info->length + info->align_mask;
+! 	if (length < info->length)
+  		return -ENOMEM;
+  
+  	/* Adjust search limits by the desired length */
+! 	if (info->high_limit < length)
+  		return -ENOMEM;
+  	high_limit = info->high_limit - length;
+  
+! 	if (info->low_limit > high_limit)
+  		return -ENOMEM;
+  	low_limit = info->low_limit + length;
+  
+  	/* Check if rbtree root looks promising */
+--- 1738,1765 ----
+  
+  	/* Adjust search length to account for worst case alignment overhead */
+  	length = info->length + info->align_mask;
+! 	if (length < info->length) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/* Adjust search limits by the desired length */
+! 	if (info->high_limit < length) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	high_limit = info->high_limit - length;
+  
+! 	if (info->low_limit > high_limit) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	low_limit = info->low_limit + length;
+  
+  	/* Check if rbtree root looks promising */
+***************
+*** 1741,1748 ****
+  		gap_start = vma->vm_prev ? vma->vm_prev->vm_end : 0;
+  check_current:
+  		/* Check if current node has a suitable gap */
+! 		if (gap_start > high_limit)
+  			return -ENOMEM;
+  		if (gap_end >= low_limit && gap_end - gap_start >= length)
+  			goto found;
+  
+--- 1785,1796 ----
+  		gap_start = vma->vm_prev ? vma->vm_prev->vm_end : 0;
+  check_current:
+  		/* Check if current node has a suitable gap */
+! 		if (gap_start > high_limit) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  		if (gap_end >= low_limit && gap_end - gap_start >= length)
+  			goto found;
+  
+***************
+*** 1776,1783 ****
+  	/* Check highest gap, which does not precede any rbtree node */
+  	gap_start = mm->highest_vm_end;
+  	gap_end = ULONG_MAX;  /* Only for VM_BUG_ON below */
+! 	if (gap_start > high_limit)
+  		return -ENOMEM;
+  
+  found:
+  	/* We found a suitable gap. Clip it with the original low_limit. */
+--- 1824,1835 ----
+  	/* Check highest gap, which does not precede any rbtree node */
+  	gap_start = mm->highest_vm_end;
+  	gap_end = ULONG_MAX;  /* Only for VM_BUG_ON below */
+! 	if (gap_start > high_limit) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  found:
+  	/* We found a suitable gap. Clip it with the original low_limit. */
+***************
+*** 1800,1819 ****
+  
+  	/* Adjust search length to account for worst case alignment overhead */
+  	length = info->length + info->align_mask;
+! 	if (length < info->length)
+  		return -ENOMEM;
+  
+  	/*
+  	 * Adjust search limits by the desired length.
+  	 * See implementation comment at top of unmapped_area().
+  	 */
+  	gap_end = info->high_limit;
+! 	if (gap_end < length)
+  		return -ENOMEM;
+  	high_limit = gap_end - length;
+  
+! 	if (info->low_limit > high_limit)
+  		return -ENOMEM;
+  	low_limit = info->low_limit + length;
+  
+  	/* Check highest gap, which does not precede any rbtree node */
+--- 1852,1883 ----
+  
+  	/* Adjust search length to account for worst case alignment overhead */
+  	length = info->length + info->align_mask;
+! 	if (length < info->length) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/*
+  	 * Adjust search limits by the desired length.
+  	 * See implementation comment at top of unmapped_area().
+  	 */
+  	gap_end = info->high_limit;
+! 	if (gap_end < length) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	high_limit = gap_end - length;
+  
+! 	if (info->low_limit > high_limit) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	low_limit = info->low_limit + length;
+  
+  	/* Check highest gap, which does not precede any rbtree node */
+***************
+*** 1822,1832 ****
+  		goto found_highest;
+  
+  	/* Check if rbtree root looks promising */
+! 	if (RB_EMPTY_ROOT(&mm->mm_rb))
+  		return -ENOMEM;
+  	vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+! 	if (vma->rb_subtree_gap < length)
+  		return -ENOMEM;
+  
+  	while (true) {
+  		/* Visit right subtree if it looks promising */
+--- 1886,1904 ----
+  		goto found_highest;
+  
+  	/* Check if rbtree root looks promising */
+! 	if (RB_EMPTY_ROOT(&mm->mm_rb)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+! 	if (vma->rb_subtree_gap < length) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	while (true) {
+  		/* Visit right subtree if it looks promising */
+***************
+*** 1844,1851 ****
+  check_current:
+  		/* Check if current node has a suitable gap */
+  		gap_end = vma->vm_start;
+! 		if (gap_end < low_limit)
+  			return -ENOMEM;
+  		if (gap_start <= high_limit && gap_end - gap_start >= length)
+  			goto found;
+  
+--- 1916,1927 ----
+  check_current:
+  		/* Check if current node has a suitable gap */
+  		gap_end = vma->vm_start;
+! 		if (gap_end < low_limit) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  		if (gap_start <= high_limit && gap_end - gap_start >= length)
+  			goto found;
+  
+***************
+*** 1863,1870 ****
+  		/* Go back up the rbtree to find next candidate node */
+  		while (true) {
+  			struct rb_node *prev = &vma->vm_rb;
+! 			if (!rb_parent(prev))
+  				return -ENOMEM;
+  			vma = rb_entry(rb_parent(prev),
+  				       struct vm_area_struct, vm_rb);
+  			if (prev == vma->vm_rb.rb_right) {
+--- 1939,1950 ----
+  		/* Go back up the rbtree to find next candidate node */
+  		while (true) {
+  			struct rb_node *prev = &vma->vm_rb;
+! 			if (!rb_parent(prev)) {
+!                                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                                 }
+  				return -ENOMEM;
++                         }
+  			vma = rb_entry(rb_parent(prev),
+  				       struct vm_area_struct, vm_rb);
+  			if (prev == vma->vm_rb.rb_right) {
+***************
+*** 1910,1917 ****
+  	struct vm_area_struct *vma;
+  	struct vm_unmapped_area_info info;
+  
+! 	if (len > TASK_SIZE - mmap_min_addr)
+  		return -ENOMEM;
+  
+  	if (flags & MAP_FIXED)
+  		return addr;
+--- 1990,2001 ----
+  	struct vm_area_struct *vma;
+  	struct vm_unmapped_area_info info;
+  
+! 	if (len > TASK_SIZE - mmap_min_addr) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	if (flags & MAP_FIXED)
+  		return addr;
+***************
+*** 1949,1956 ****
+  	struct vm_unmapped_area_info info;
+  
+  	/* requested length too big for entire address space */
+! 	if (len > TASK_SIZE - mmap_min_addr)
+  		return -ENOMEM;
+  
+  	if (flags & MAP_FIXED)
+  		return addr;
+--- 2033,2044 ----
+  	struct vm_unmapped_area_info info;
+  
+  	/* requested length too big for entire address space */
+! 	if (len > TASK_SIZE - mmap_min_addr) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	if (flags & MAP_FIXED)
+  		return addr;
+***************
+*** 2001,2008 ****
+  		return error;
+  
+  	/* Careful about overflows.. */
+! 	if (len > TASK_SIZE)
+  		return -ENOMEM;
+  
+  	get_area = current->mm->get_unmapped_area;
+  	if (file && file->f_op->get_unmapped_area)
+--- 2089,2100 ----
+  		return error;
+  
+  	/* Careful about overflows.. */
+! 	if (len > TASK_SIZE) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	get_area = current->mm->get_unmapped_area;
+  	if (file && file->f_op->get_unmapped_area)
+***************
+*** 2011,2020 ****
+  	if (IS_ERR_VALUE(addr))
+  		return addr;
+  
+! 	if (addr > TASK_SIZE - len)
+  		return -ENOMEM;
+! 	if (addr & ~PAGE_MASK)
+  		return -EINVAL;
+  
+  	addr = arch_rebalance_pgtables(addr, len);
+  	error = security_mmap_addr(addr);
+--- 2103,2120 ----
+  	if (IS_ERR_VALUE(addr))
+  		return addr;
+  
+! 	if (addr > TASK_SIZE - len) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
+!         }
+! 	if (addr & ~PAGE_MASK) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -EINVAL;
++         }
+  
+  	addr = arch_rebalance_pgtables(addr, len);
+  	error = security_mmap_addr(addr);
+***************
+*** 2093,2107 ****
+  	unsigned long new_start, actual_size;
+  
+  	/* address space limit tests */
+! 	if (!may_expand_vm(mm, grow))
+  		return -ENOMEM;
+  
+  	/* Stack limit test */
+  	actual_size = size;
+  	if (size && (vma->vm_flags & (VM_GROWSUP | VM_GROWSDOWN)))
+  		actual_size -= PAGE_SIZE;
+! 	if (actual_size > READ_ONCE(rlim[RLIMIT_STACK].rlim_cur))
+  		return -ENOMEM;
+  
+  	/* mlock limit tests */
+  	if (vma->vm_flags & VM_LOCKED) {
+--- 2193,2215 ----
+  	unsigned long new_start, actual_size;
+  
+  	/* address space limit tests */
+! 	if (!may_expand_vm(mm, grow)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/* Stack limit test */
+  	actual_size = size;
+  	if (size && (vma->vm_flags & (VM_GROWSUP | VM_GROWSDOWN)))
+  		actual_size -= PAGE_SIZE;
+! 	if (actual_size > READ_ONCE(rlim[RLIMIT_STACK].rlim_cur)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/* mlock limit tests */
+  	if (vma->vm_flags & VM_LOCKED) {
+***************
+*** 2110,2117 ****
+  		locked = mm->locked_vm + grow;
+  		limit = READ_ONCE(rlim[RLIMIT_MEMLOCK].rlim_cur);
+  		limit >>= PAGE_SHIFT;
+! 		if (locked > limit && !capable(CAP_IPC_LOCK))
+  			return -ENOMEM;
+  	}
+  
+  	/* Check to ensure the stack will not grow into a hugetlb-only region */
+--- 2218,2229 ----
+  		locked = mm->locked_vm + grow;
+  		limit = READ_ONCE(rlim[RLIMIT_MEMLOCK].rlim_cur);
+  		limit >>= PAGE_SHIFT;
+! 		if (locked > limit && !capable(CAP_IPC_LOCK)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  	}
+  
+  	/* Check to ensure the stack will not grow into a hugetlb-only region */
+***************
+*** 2124,2131 ****
+  	 * Overcommit..  This must be the final test, as it will
+  	 * update security statistics.
+  	 */
+! 	if (security_vm_enough_memory_mm(mm, grow))
+  		return -ENOMEM;
+  
+  	/* Ok, everything looks good - let it rip */
+  	if (vma->vm_flags & VM_LOCKED)
+--- 2236,2247 ----
+  	 * Overcommit..  This must be the final test, as it will
+  	 * update security statistics.
+  	 */
+! 	if (security_vm_enough_memory_mm(mm, grow)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	/* Ok, everything looks good - let it rip */
+  	if (vma->vm_flags & VM_LOCKED)
+***************
+*** 2150,2157 ****
+  	 * We must make sure the anon_vma is allocated
+  	 * so that the anon_vma locking is not a noop.
+  	 */
+! 	if (unlikely(anon_vma_prepare(vma)))
+  		return -ENOMEM;
+  	vma_lock_anon_vma(vma);
+  
+  	/*
+--- 2266,2277 ----
+  	 * We must make sure the anon_vma is allocated
+  	 * so that the anon_vma locking is not a noop.
+  	 */
+! 	if (unlikely(anon_vma_prepare(vma))) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  	vma_lock_anon_vma(vma);
+  
+  	/*
+***************
+*** 2164,2169 ****
+--- 2284,2292 ----
+  		address = PAGE_ALIGN(address+4);
+  	else {
+  		vma_unlock_anon_vma(vma);
++                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
++                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
++                 }
+  		return -ENOMEM;
+  	}
+  	error = 0;
+***************
+*** 2223,2230 ****
+  	 * We must make sure the anon_vma is allocated
+  	 * so that the anon_vma locking is not a noop.
+  	 */
+! 	if (unlikely(anon_vma_prepare(vma)))
+  		return -ENOMEM;
+  
+  	address &= PAGE_MASK;
+  	error = security_mmap_addr(address);
+--- 2346,2357 ----
+  	 * We must make sure the anon_vma is allocated
+  	 * so that the anon_vma locking is not a noop.
+  	 */
+! 	if (unlikely(anon_vma_prepare(vma))) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	address &= PAGE_MASK;
+  	error = security_mmap_addr(address);
+***************
+*** 2298,2305 ****
+  	address &= PAGE_MASK;
+  	next = vma->vm_next;
+  	if (next && next->vm_start == address + PAGE_SIZE) {
+! 		if (!(next->vm_flags & VM_GROWSUP))
+  			return -ENOMEM;
+  	}
+  	return expand_upwards(vma, address);
+  }
+--- 2425,2436 ----
+  	address &= PAGE_MASK;
+  	next = vma->vm_next;
+  	if (next && next->vm_start == address + PAGE_SIZE) {
+! 		if (!(next->vm_flags & VM_GROWSUP)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  	}
+  	return expand_upwards(vma, address);
+  }
+***************
+*** 2327,2334 ****
+  	address &= PAGE_MASK;
+  	prev = vma->vm_prev;
+  	if (prev && prev->vm_end == address) {
+! 		if (!(prev->vm_flags & VM_GROWSDOWN))
+  			return -ENOMEM;
+  	}
+  	return expand_downwards(vma, address);
+  }
+--- 2458,2469 ----
+  	address &= PAGE_MASK;
+  	prev = vma->vm_prev;
+  	if (prev && prev->vm_end == address) {
+! 		if (!(prev->vm_flags & VM_GROWSDOWN)) {
+!                         if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                                 current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                         }
+  			return -ENOMEM;
++                 }
+  	}
+  	return expand_downwards(vma, address);
+  }
+***************
+*** 2637,2642 ****
+--- 2772,2781 ----
+  	unsigned long ret = -EINVAL;
+  	struct file *file;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 return -EPERM;
++         }
++ 
+  	pr_warn_once("%s (%d) uses deprecated remap_file_pages() syscall. "
+  			"See Documentation/vm/remap_file_pages.txt.\n",
+  			current->comm, current->pid);
+***************
+*** 2746,2753 ****
+  	}
+  
+  	/* Check against address space limits *after* clearing old maps... */
+! 	if (!may_expand_vm(mm, len >> PAGE_SHIFT))
+  		return -ENOMEM;
+  
+  	if (mm->map_count > sysctl_max_map_count)
+  		return -ENOMEM;
+--- 2885,2896 ----
+  	}
+  
+  	/* Check against address space limits *after* clearing old maps... */
+! 	if (!may_expand_vm(mm, len >> PAGE_SHIFT)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return -ENOMEM;
++         }
+  
+  	if (mm->map_count > sysctl_max_map_count)
+  		return -ENOMEM;
+diff -crB linux-4.2/mm/mremap.c linux-4.2-sbox/mm/mremap.c
+*** linux-4.2/mm/mremap.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/mremap.c	Wed Feb 10 16:46:01 2016
+***************
+*** 380,387 ****
+  			return ERR_PTR(-EAGAIN);
+  	}
+  
+! 	if (!may_expand_vm(mm, (new_len - old_len) >> PAGE_SHIFT))
+  		return ERR_PTR(-ENOMEM);
+  
+  	if (vma->vm_flags & VM_ACCOUNT) {
+  		unsigned long charged = (new_len - old_len) >> PAGE_SHIFT;
+--- 380,391 ----
+  			return ERR_PTR(-EAGAIN);
+  	}
+  
+! 	if (!may_expand_vm(mm, (new_len - old_len) >> PAGE_SHIFT)) {
+!                 if ((current->sbox_flags & SBOX_MEMLIMITON)) {
+!                         current->sbox_flags |= SBOX_WAS_MEMLIMIT;
+!                 }
+  		return ERR_PTR(-ENOMEM);
++         }
+  
+  	if (vma->vm_flags & VM_ACCOUNT) {
+  		unsigned long charged = (new_len - old_len) >> PAGE_SHIFT;
+diff -crB linux-4.2/mm/msync.c linux-4.2-sbox/mm/msync.c
+*** linux-4.2/mm/msync.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/msync.c	Wed Feb 10 16:46:01 2016
+***************
+*** 36,41 ****
+--- 36,44 ----
+  	int unmapped_error = 0;
+  	int error = -EINVAL;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
+  		goto out;
+  	if (start & ~PAGE_MASK)
+diff -crB linux-4.2/mm/process_vm_access.c linux-4.2-sbox/mm/process_vm_access.c
+*** linux-4.2/mm/process_vm_access.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/process_vm_access.c	Wed Feb 10 16:46:01 2016
+***************
+*** 288,293 ****
+--- 288,295 ----
+  		unsigned long, liovcnt, const struct iovec __user *, rvec,
+  		unsigned long, riovcnt,	unsigned long, flags)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
+  	return process_vm_rw(pid, lvec, liovcnt, rvec, riovcnt, flags, 0);
+  }
+  
+***************
+*** 296,301 ****
+--- 298,305 ----
+  		unsigned long, liovcnt, const struct iovec __user *, rvec,
+  		unsigned long, riovcnt,	unsigned long, flags)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
+  	return process_vm_rw(pid, lvec, liovcnt, rvec, riovcnt, flags, 1);
+  }
+  
+***************
+*** 347,352 ****
+--- 351,359 ----
+  		       compat_ulong_t, riovcnt,
+  		       compat_ulong_t, flags)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return compat_process_vm_rw(pid, lvec, liovcnt, rvec,
+  				    riovcnt, flags, 0);
+  }
+***************
+*** 358,363 ****
+--- 365,373 ----
+  		       compat_ulong_t, riovcnt,
+  		       compat_ulong_t, flags)
+  {
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	return compat_process_vm_rw(pid, lvec, liovcnt, rvec,
+  				    riovcnt, flags, 1);
+  }
+diff -crB linux-4.2/mm/readahead.c linux-4.2-sbox/mm/readahead.c
+*** linux-4.2/mm/readahead.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/readahead.c	Wed Feb 10 16:46:01 2016
+***************
+*** 564,569 ****
+--- 564,572 ----
+  	ssize_t ret;
+  	struct fd f;
+  
++         if (SBOX_IS_RESTRICTED())
++                 return -EPERM;
++ 
+  	ret = -EBADF;
+  	f = fdget(fd);
+  	if (f.file) {
+diff -crB linux-4.2/mm/swapfile.c linux-4.2-sbox/mm/swapfile.c
+*** linux-4.2/mm/swapfile.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/mm/swapfile.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1812,1817 ****
+--- 1812,1822 ----
+  	int err, found = 0;
+  	unsigned int old_block_size;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (!capable(CAP_SYS_ADMIN))
+  		return -EPERM;
+  
+***************
+*** 2361,2366 ****
+--- 2366,2376 ----
+  	struct page *page = NULL;
+  	struct inode *inode = NULL;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (swap_flags & ~SWAP_FLAGS_VALID)
+  		return -EINVAL;
+  
+diff -crB linux-4.2/net/compat.c linux-4.2-sbox/net/compat.c
+*** linux-4.2/net/compat.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/net/compat.c	Wed Feb 10 16:46:01 2016
+***************
+*** 367,374 ****
+  		       char __user *, optval, unsigned int, optlen)
+  {
+  	int err;
+! 	struct socket *sock = sockfd_lookup(fd, &err);
+  
+  	if (sock) {
+  		err = security_socket_setsockopt(sock, level, optname);
+  		if (err) {
+--- 367,380 ----
+  		       char __user *, optval, unsigned int, optlen)
+  {
+  	int err;
+! 	struct socket *sock;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
++         sock = sockfd_lookup(fd, &err);
+  	if (sock) {
+  		err = security_socket_setsockopt(sock, level, optname);
+  		if (err) {
+***************
+*** 487,494 ****
+  		       char __user *, optval, int __user *, optlen)
+  {
+  	int err;
+! 	struct socket *sock = sockfd_lookup(fd, &err);
+  
+  	if (sock) {
+  		err = security_socket_getsockopt(sock, level, optname);
+  		if (err) {
+--- 493,506 ----
+  		       char __user *, optval, int __user *, optlen)
+  {
+  	int err;
+! 	struct socket *sock;
+! 
+!         if (SBOX_IS_RESTRICTED()) {
+!                 SBOX_SET_SECURITY_ERR();
+!                 return -EPERM;
+!         }
+  
++         sock = sockfd_lookup(fd, &err);
+  	if (sock) {
+  		err = security_socket_getsockopt(sock, level, optname);
+  		if (err) {
+***************
+*** 716,738 ****
+--- 728,770 ----
+  
+  COMPAT_SYSCALL_DEFINE3(sendmsg, int, fd, struct compat_msghdr __user *, msg, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return __sys_sendmsg(fd, (struct user_msghdr __user *)msg, flags | MSG_CMSG_COMPAT);
+  }
+  
+  COMPAT_SYSCALL_DEFINE4(sendmmsg, int, fd, struct compat_mmsghdr __user *, mmsg,
+  		       unsigned int, vlen, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return __sys_sendmmsg(fd, (struct mmsghdr __user *)mmsg, vlen,
+  			      flags | MSG_CMSG_COMPAT);
+  }
+  
+  COMPAT_SYSCALL_DEFINE3(recvmsg, int, fd, struct compat_msghdr __user *, msg, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return __sys_recvmsg(fd, (struct user_msghdr __user *)msg, flags | MSG_CMSG_COMPAT);
+  }
+  
+  COMPAT_SYSCALL_DEFINE4(recv, int, fd, void __user *, buf, compat_size_t, len, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return sys_recv(fd, buf, len, flags | MSG_CMSG_COMPAT);
+  }
+  
+***************
+*** 740,745 ****
+--- 772,782 ----
+  		       unsigned int, flags, struct sockaddr __user *, addr,
+  		       int __user *, addrlen)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	return sys_recvfrom(fd, buf, len, flags | MSG_CMSG_COMPAT, addr, addrlen);
+  }
+  
+***************
+*** 750,755 ****
+--- 787,797 ----
+  	int datagrams;
+  	struct timespec ktspec;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (timeout == NULL)
+  		return __sys_recvmmsg(fd, (struct mmsghdr __user *)mmsg, vlen,
+  				      flags | MSG_CMSG_COMPAT, NULL);
+***************
+*** 771,776 ****
+--- 813,823 ----
+  	u32 a[6];
+  	u32 a0, a1;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (call < SYS_SOCKET || call > SYS_SENDMMSG)
+  		return -EINVAL;
+  	if (copy_from_user(a, args, nas[call]))
+diff -crB linux-4.2/net/socket.c linux-4.2-sbox/net/socket.c
+*** linux-4.2/net/socket.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/net/socket.c	Wed Feb 10 16:46:01 2016
+***************
+*** 1222,1227 ****
+--- 1222,1232 ----
+  	struct socket *sock;
+  	int flags;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* Check the SOCK_* constants for consistency.  */
+  	BUILD_BUG_ON(SOCK_CLOEXEC != O_CLOEXEC);
+  	BUILD_BUG_ON((SOCK_MAX | SOCK_TYPE_MASK) != SOCK_TYPE_MASK);
+***************
+*** 1265,1270 ****
+--- 1270,1280 ----
+  	struct file *newfile1, *newfile2;
+  	int flags;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	flags = type & ~SOCK_TYPE_MASK;
+  	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+  		return -EINVAL;
+***************
+*** 1372,1377 ****
+--- 1382,1392 ----
+  	struct sockaddr_storage address;
+  	int err, fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (sock) {
+  		err = move_addr_to_kernel(umyaddr, addrlen, &address);
+***************
+*** 1401,1406 ****
+--- 1416,1426 ----
+  	int err, fput_needed;
+  	int somaxconn;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (sock) {
+  		somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
+***************
+*** 1436,1441 ****
+--- 1456,1466 ----
+  	int err, len, newfd, fput_needed;
+  	struct sockaddr_storage address;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+  		return -EINVAL;
+  
+***************
+*** 1534,1539 ****
+--- 1559,1569 ----
+  	struct sockaddr_storage address;
+  	int err, fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (!sock)
+  		goto out;
+***************
+*** 1566,1571 ****
+--- 1596,1606 ----
+  	struct sockaddr_storage address;
+  	int len, err, fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (!sock)
+  		goto out;
+***************
+*** 1597,1602 ****
+--- 1632,1642 ----
+  	struct sockaddr_storage address;
+  	int len, err, fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (sock != NULL) {
+  		err = security_socket_getpeername(sock);
+***************
+*** 1633,1638 ****
+--- 1673,1683 ----
+  	struct iovec iov;
+  	int fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
+  	if (unlikely(err))
+  		return err;
+***************
+*** 1689,1694 ****
+--- 1734,1744 ----
+  	int err, err2;
+  	int fput_needed;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	err = import_single_range(READ, ubuf, size, &iov, &msg.msg_iter);
+  	if (unlikely(err))
+  		return err;
+***************
+*** 1739,1744 ****
+--- 1789,1799 ----
+  	int err, fput_needed;
+  	struct socket *sock;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (optlen < 0)
+  		return -EINVAL;
+  
+***************
+*** 1773,1778 ****
+--- 1828,1838 ----
+  	int err, fput_needed;
+  	struct socket *sock;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (sock != NULL) {
+  		err = security_socket_getsockopt(sock, level, optname);
+***************
+*** 1802,1807 ****
+--- 1862,1872 ----
+  	int err, fput_needed;
+  	struct socket *sock;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+  	if (sock != NULL) {
+  		err = security_socket_shutdown(sock, how);
+***************
+*** 1992,1997 ****
+--- 2057,2067 ----
+  
+  SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & MSG_CMSG_COMPAT)
+  		return -EINVAL;
+  	return __sys_sendmsg(fd, msg, flags);
+***************
+*** 2060,2065 ****
+--- 2130,2140 ----
+  SYSCALL_DEFINE4(sendmmsg, int, fd, struct mmsghdr __user *, mmsg,
+  		unsigned int, vlen, unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & MSG_CMSG_COMPAT)
+  		return -EINVAL;
+  	return __sys_sendmmsg(fd, mmsg, vlen, flags);
+***************
+*** 2157,2162 ****
+--- 2232,2242 ----
+  SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
+  		unsigned int, flags)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & MSG_CMSG_COMPAT)
+  		return -EINVAL;
+  	return __sys_recvmsg(fd, msg, flags);
+***************
+*** 2277,2282 ****
+--- 2357,2367 ----
+  	int datagrams;
+  	struct timespec timeout_sys;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (flags & MSG_CMSG_COMPAT)
+  		return -EINVAL;
+  
+***************
+*** 2322,2327 ****
+--- 2407,2417 ----
+  	int err;
+  	unsigned int len;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	if (call < 1 || call > SYS_SENDMMSG)
+  		return -EINVAL;
+  
+diff -crB linux-4.2/security/keys/keyctl.c linux-4.2-sbox/security/keys/keyctl.c
+*** linux-4.2/security/keys/keyctl.c	Sun Aug 30 21:34:09 2015
+--- linux-4.2-sbox/security/keys/keyctl.c	Wed Feb 10 16:46:01 2016
+***************
+*** 69,74 ****
+--- 69,79 ----
+  	long ret;
+  	bool vm;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	ret = -EINVAL;
+  	if (plen > 1024 * 1024 - 1)
+  		goto error;
+***************
+*** 173,178 ****
+--- 178,188 ----
+  	char type[32], *description, *callout_info;
+  	long ret;
+  
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	/* pull the type into kernel space */
+  	ret = key_get_type_from_user(type, _type, sizeof(type));
+  	if (ret < 0)
+***************
+*** 1559,1564 ****
+--- 1569,1579 ----
+  SYSCALL_DEFINE5(keyctl, int, option, unsigned long, arg2, unsigned long, arg3,
+  		unsigned long, arg4, unsigned long, arg5)
+  {
++         if (SBOX_IS_RESTRICTED()) {
++                 SBOX_SET_SECURITY_ERR();
++                 return -EPERM;
++         }
++ 
+  	switch (option) {
+  	case KEYCTL_GET_KEYRING_ID:
+  		return keyctl_get_keyring_ID((key_serial_t) arg2,
