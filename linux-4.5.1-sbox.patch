@@ -96639,7 +96639,7 @@ diff -uarN b/mm/mmap.c a/mm/mmap.c
 -					(len >> PAGE_SHIFT) - nr_pages))
 -			return -ENOMEM;
 -	}
-+        if (!may_expand_vm(mm, (len >> PAGE_SHIFT) - nr_pages)) {
++        if (!may_expand_vm(mm, vm_flags, (len >> PAGE_SHIFT) - nr_pages)) {
 +            if ((current->sbox_flags & SBOX_MEMLIMITON)) {
 +                current->sbox_flags |= SBOX_WAS_MEMLIMIT;
 +            }
