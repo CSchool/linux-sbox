@@ -3830,7 +3830,7 @@ diff -crB linux-4.2/kernel/time/posix-cpu-timers.c linux-4.2-sbox/kernel/time/po
 + 
 + 	soft = READ_ONCE(sig->rlim[RLIMIT_MCPU].rlim_cur);
 + 	if (soft != RLIM_INFINITY) {
-+ 		unsigned long psecs = cputime_to_secs(ptime);
++ 		unsigned long psecs = cputime_to_msecs(ptime);
 + 		unsigned long hard =
 + 			READ_ONCE(sig->rlim[RLIMIT_MCPU].rlim_max);
 + 		cputime_t x;
